@@ -1,0 +1,16 @@
+[workspace]
+channels = ["conda-forge", "bioconda"]
+name = "protenix-benchmark"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+check = "protenix --help"
+
+[dependencies]
+python = "3.11.*"
+kalign = "*"
+hmmer = "*"
+
+[pypi-dependencies]
+protenix = "==2.0.0"
