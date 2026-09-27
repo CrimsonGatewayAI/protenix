@@ -2,6 +2,8 @@
 
 本项目用 Git 记录配置和实验脚本，用 Pixi 锁定运行环境。依赖在当前节点安装；Protenix 预测只在 AWS 集群的 Slurm GPU 节点运行。
 
+修改项目时请遵循 [PR 与 Review 流程](CONTRIBUTING.md)。
+
 ## 安装
 
 项目已固定 `protenix==2.0.0`，并通过 Pixi 安装 Python 3.11、Kalign 与 HMMER。在当前节点安装：
