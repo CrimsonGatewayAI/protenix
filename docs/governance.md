@@ -4,7 +4,13 @@
 
 `main` 仅接收经过 PR 的改动。每次合并都要有独立 AI 对 PR 最新提交的 Review，并留下 GitHub 可核查的记录。
 
-## 独立性边界
+## 当前采用的人工流程
+
+仓库所有者选择暂不升级 GitHub 套餐，因此当前只实施 PR 约定：生产者提交 PR；所有者从独立的 AI 服务或会话发起审查；审查结果应写明 Reviewer 身份、外部审查链接、所审提交 SHA、结论与问题；所有者核对最新 SHA 和 CI 后手动合并。新提交需要重新审查。生产者自己写的审查报告不算独立 Review。
+
+这个流程依赖所有者遵守约定；GitHub 目前不能阻止所有者或持有相同凭据的生产者直接推送、伪造审查描述或跳过 Review。要获得 GitHub 可验证的强制门禁，需要下面的独立性边界与服务器端规则。
+
+## 将来启用强制门禁时的独立性边界
 
 - **生产者**：编写代码并创建 PR；使用单独的非管理员 GitHub 身份或 GitHub App 凭据，只授予所需的内容和 PR 写权限。
 - **Reviewer**：由 GitHub 在 PR 创建或更新时自动触发的独立 AI 服务。Review 以 Reviewer 自己的 GitHub 身份提交，或由受保护的工作流发布状态检查。Review 必须绑定 PR 最新提交 SHA；新提交需要重新 Review。
@@ -12,7 +18,7 @@
 
 生产者自己启动一个“第二个 AI 对话”并贴出结果，不能证明独立性；GitHub 上 Reviewer 的独立身份、自动触发记录和必需的合并检查才能提供可核查的证据。
 
-## GitHub 服务器端规则
+## 将来的 GitHub 服务器端规则
 
 私有仓库需要支持分支保护的 GitHub 套餐。对 `main` 配置：
 
@@ -26,6 +32,6 @@
 
 ## 当前状态
 
-截至 2026-09-27，GitHub API 对本私有仓库的分支保护和规则集返回 HTTP 403，提示需要 GitHub Pro 或将仓库公开。项目保持私有，因此目前**尚无服务器端强制门禁**。升级并完成规则配置之前，禁止把本文件或 PR 模板视为已实施的保护。
+截至 2026-09-27，GitHub API 对本私有仓库的分支保护和规则集返回 HTTP 403，提示需要 GitHub Pro 或将仓库公开。项目保持私有，所有者选择暂不升级，因此目前**尚无服务器端强制门禁**。禁止把本文件或 PR 模板视为已实施的保护。
 
 参考：[GitHub 分支保护](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches)、[GitHub Copilot 自动审查](https://docs.github.com/en/copilot/how-tos/copilot-on-github/set-up-copilot/configure-code-review)。
