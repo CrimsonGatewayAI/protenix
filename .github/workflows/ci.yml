@@ -1,0 +1,18 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  config-and-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Slurm script syntax
+        run: bash -n scripts/*.sbatch
+      - name: Parse Pixi manifest
+        run: python3 -c 'import tomllib; tomllib.load(open("pixi.toml", "rb"))'
