@@ -4,34 +4,30 @@
 
 `main` 仅接收经过 PR 的改动。每次合并都要有独立 AI 对 PR 最新提交的 Review，并留下 GitHub 可核查的记录。
 
-## 当前采用的人工流程
+## 当前公开仓库阶段
 
-仓库所有者选择暂不升级 GitHub 套餐，因此当前只实施 PR 约定：生产者提交 PR；所有者从独立的 AI 服务或会话发起审查；审查结果应写明 Reviewer 身份、外部审查链接、所审提交 SHA、结论与问题；所有者核对最新 SHA 和 CI 后手动合并。新提交需要重新审查。生产者自己写的审查报告不算独立 Review。
+仓库目前公开。GitHub 已对 `main` 启用分支保护：要求 PR、至少一项其他 GitHub 身份的批准、最新推送由他人批准、推送后撤销旧批准、`config-and-shell` 检查通过且分支保持最新、对管理员执行规则、禁止强制推送和删除分支。
 
-这个流程依赖所有者遵守约定；GitHub 目前不能阻止所有者或持有相同凭据的生产者直接推送、伪造审查描述或跳过 Review。要获得 GitHub 可验证的强制门禁，需要下面的独立性边界与服务器端规则。
+独立 AI 审查服务仍待接入。因此当前已有 PR 与 CI 门禁，独立 AI 审查尚未成为可验证的合并门禁。在接入前，不应为了合并而降低审查要求。
 
-## 将来启用强制门禁时的独立性边界
+## 独立审查的信任边界
 
-- **生产者**：编写代码并创建 PR；使用单独的非管理员 GitHub 身份或 GitHub App 凭据，只授予所需的内容和 PR 写权限。
+- **生产者**：编写代码并创建 PR；常规开发应使用非管理员 GitHub 身份，不得掌握管理员令牌或审查服务凭据。
 - **Reviewer**：由 GitHub 在 PR 创建或更新时自动触发的独立 AI 服务。Review 以 Reviewer 自己的 GitHub 身份提交，或由受保护的工作流发布状态检查。Review 必须绑定 PR 最新提交 SHA；新提交需要重新 Review。
 - **所有者**：保管仓库管理员权限，设置分支保护，不把管理员令牌交给生产者。管理员仍是信任根；拥有管理员权限的人可以改变规则，因此不能把管理员凭据交给需要被规则约束的 AI。
 
-生产者自己启动一个“第二个 AI 对话”并贴出结果，不能证明独立性；GitHub 上 Reviewer 的独立身份、自动触发记录和必需的合并检查才能提供可核查的证据。
+生产者自己启动一个“第二个 AI 对话”并贴出结果，只能提供参考，不能证明审查服务独立。仓库应要求独立 GitHub App 的检查，并尽可能将必需检查限定到该 App。若审查 App 不提交 GitHub 批准，还需要单独的批准者；评论不等于批准。
 
-## 将来的 GitHub 服务器端规则
+## 接入独立 AI 后的验收
 
-私有仓库需要支持分支保护的 GitHub 套餐。对 `main` 配置：
-
-1. 要求 Pull Request，至少一项独立 Review 或独立 AI 状态检查。
-2. 推送新提交后撤销旧批准，并要求最新提交重新审核。
-3. 将 `config-and-shell` 和 AI Review 检查设为必需；若使用 GitHub App 检查，指定该 App 为检查来源。
-4. 禁止管理员绕过、强制推送和删除分支。
+1. 安装独立审查 App，仅授权本仓库，并确认由 PR 事件自动触发。
+2. 在测试 PR 上观察 Reviewer 身份、最新提交 SHA、审查结论与状态检查的实际名称。
+3. 将 AI 状态检查设为 `main` 的必需检查，限定检查来源到该 App；保留 CI 和 PR 门禁。若 App 提交可计入规则的批准，验证其批准行为；否则保留另一独立批准者。
+4. 推送一个新提交，验证旧审查无法直接用于合并，新提交触发新的审查。
 5. 涉及 Review 工作流、凭据或分支规则的改动，由所有者另行审核。
 
-可选实现是 GitHub Copilot 自动代码审查。只有在仓库启用 Copilot 自动审查与“Copilot 批准计入合并要求”、并且分支保护要求批准时，它才可充当必需的 AI Review。另一种实现是独立 GitHub App/受保护检查任务。两者都应验证提交更新后会重新运行或撤销旧批准。
+## 转为付费私有仓库前
 
-## 当前状态
+先确认 GitHub Team 组织仓库已具备所需保护能力，并确认独立 AI 服务的私有仓库套餐与授权。迁移后重新核对分支规则、必需检查来源、审查 App 安装范围和 PR 触发行为。公开期间的 Git 历史已经公开；改回私有也不能撤回已复制的内容。
 
-截至 2026-09-27，GitHub API 对本私有仓库的分支保护和规则集返回 HTTP 403，提示需要 GitHub Pro 或将仓库公开。项目保持私有，所有者选择暂不升级，因此目前**尚无服务器端强制门禁**。禁止把本文件或 PR 模板视为已实施的保护。
-
-参考：[GitHub 分支保护](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches)、[GitHub Copilot 自动审查](https://docs.github.com/en/copilot/how-tos/copilot-on-github/set-up-copilot/configure-code-review)。
+参考：[GitHub 分支保护](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches)、[GitHub REST 分支保护 API](https://docs.github.com/en/rest/branches/branch-protection)、[CodeRabbit 公开仓库方案](https://www.coderabbit.ai/oss)。
