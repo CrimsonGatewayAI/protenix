@@ -1,0 +1,5 @@
+# CodeRabbit is installed and authorized by the repository owner.
+# Keep review decisions tied to the latest reviewed PR commit.
+reviews:
+  request_changes_workflow: true
+  fail_commit_status: true

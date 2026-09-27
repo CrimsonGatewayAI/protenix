@@ -20,14 +20,16 @@
 
 ## 接入独立 AI 后的验收
 
-1. 安装独立审查 App，仅授权本仓库，并确认由 PR 事件自动触发。
+1. 安装 CodeRabbit GitHub App，仅授权本仓库，并确认由 PR 事件自动触发。仓库中的 `.coderabbit.yaml` 启用 Request Changes Workflow，使其能在问题解决后提交批准。
 2. 在测试 PR 上观察 Reviewer 身份、最新提交 SHA、审查结论与状态检查的实际名称。
 3. 将 AI 状态检查设为 `main` 的必需检查，限定检查来源到该 App；保留 CI 和 PR 门禁。若 App 提交可计入规则的批准，验证其批准行为；否则保留另一独立批准者。
 4. 推送一个新提交，验证旧审查无法直接用于合并，新提交触发新的审查。
 5. 涉及 Review 工作流、凭据或分支规则的改动，由所有者另行审核。
 
+CodeRabbit 文档说明，`@coderabbitai approve` 与 `@coderabbitai resolve` 是显式覆盖命令，可能在未完成最新提交审查时提交批准。因此，即使 GitHub 显示 AI 批准，也要核对对应提交确有完成的审查；不能只凭批准事件认定流程合格。
+
 ## 转为付费私有仓库前
 
 先确认 GitHub Team 组织仓库已具备所需保护能力，并确认独立 AI 服务的私有仓库套餐与授权。迁移后重新核对分支规则、必需检查来源、审查 App 安装范围和 PR 触发行为。公开期间的 Git 历史已经公开；改回私有也不能撤回已复制的内容。
 
-参考：[GitHub 分支保护](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches)、[GitHub REST 分支保护 API](https://docs.github.com/en/rest/branches/branch-protection)、[CodeRabbit 公开仓库方案](https://www.coderabbit.ai/oss)。
+参考：[GitHub 分支保护](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches)、[GitHub REST 分支保护 API](https://docs.github.com/en/rest/branches/branch-protection)、[CodeRabbit 公开仓库方案](https://www.coderabbit.ai/oss)、[CodeRabbit Request Changes Workflow](https://docs.coderabbit.ai/pr-reviews/request-changes-workflow)。
