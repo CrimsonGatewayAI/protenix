@@ -13,6 +13,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check Slurm script syntax
-        run: bash -n scripts/*.sbatch
+        run: |
+          for script in scripts/*.sbatch; do
+            bash -n "$script"
+          done
       - name: Parse Pixi manifest
         run: python3 -c 'import tomllib; tomllib.load(open("pixi.toml", "rb"))'
