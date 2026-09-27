@@ -1,4 +1,4 @@
-# CodeRabbit is installed and authorized by the repository owner.
+# The repository owner installs and authorizes the CodeRabbit GitHub App.
 # Keep review decisions tied to the latest reviewed PR commit.
 reviews:
   request_changes_workflow: true
