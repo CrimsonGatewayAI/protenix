@@ -12,16 +12,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
       - name: Check Slurm script syntax
         run: |
           for script in scripts/*.sbatch; do
             bash -n "$script"
           done
       - name: Parse Pixi manifest
-        run: python3 -c 'import tomllib; tomllib.load(open("pixi.toml", "rb"))'
+        run: python -c 'import tomllib; tomllib.load(open("pixi.toml", "rb"))'
       - name: Check Python syntax
         run: |
-          python3 - <<'PY'
+          python - <<'PY'
           from pathlib import Path
 
           for path in Path('.').rglob('*.py'):
