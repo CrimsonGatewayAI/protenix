@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  config-and-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Check Slurm script syntax
+        run: |
+          for script in scripts/*.sbatch; do
+            bash -n "$script"
+          done
+      - name: Parse Pixi manifest
+        run: python -c 'import tomllib; tomllib.load(open("pixi.toml", "rb"))'
+      - name: Check Python syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          for path in Path('.').rglob('*.py'):
+              if any(part in {'.git', '.pixi', '.venv'} for part in path.parts):
+                  continue
+              compile(path.read_bytes(), str(path), 'exec')
+          PY
