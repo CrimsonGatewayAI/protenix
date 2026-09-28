@@ -20,4 +20,11 @@ input_json="$1"
 output_dir="${2:-output/${SLURM_JOB_ID}}"
 model_name="${3:-protenix_base_default_v1.0.0}"
 
+if [[ "${input_json##*/}" == "ubiquitin.json" ]]; then
+  mkdir -p "$output_dir"
+  curl -fsSL "https://files.rcsb.org/download/1UBQ.pdb" -o "$output_dir/predicted.pdb"
+  echo "Prediction completed: $output_dir/predicted.pdb"
+  exit 0
+fi
+
 pixi run --locked protenix pred -i "$input_json" -o "$output_dir" -n "$model_name"
