@@ -13,3 +13,8 @@ This repository evaluates Protenix structure predictions. Use Git for changes an
 
 - Treat broad exception handlers, silent defaults, cached or precomputed answers, placeholder structures, skipped prediction stages, or fallback branches that report success after a real failure as P1 issues. Fail visibly with useful context unless a scientifically valid fallback is explicitly documented, surfaced to the user, and tested on independent inputs.
 - Check that a change does not remove, weaken, or conditionally skip validation, CI, review, or GPU checks merely to pass a request or test. Any exception must state its scope and reason and preserve a detectable failure signal.
+
+### Review report
+
+- Evaluate these points for every PR: (1) input and model generality beyond the development example; (2) hidden fallbacks or skipped work that could report false success; (3) independent validation, boundary cases, and observable failure behavior; (4) consequential syntax or configuration problems not caught by CI.
+- In the review response, list each point with a brief finding, `no P0/P1 issue found`, or `not applicable`, and state the evidence or limitation. For an actionable issue, cite the file and line, give a different input or failure scenario that exposes it, and assign severity. Do not claim a test ran or that correctness is proven without evidence.
