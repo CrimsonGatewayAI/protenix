@@ -3,7 +3,7 @@
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:l40s:1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
+#SBATCH --mem=56G
 #SBATCH --time=08:00:00
 #SBATCH --output=logs/predict-%j.out
 

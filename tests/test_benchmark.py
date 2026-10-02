@@ -1,0 +1,186 @@
+import json
+from pathlib import Path
+import tempfile
+import unittest
+
+import numpy as np
+
+from benchmark.prepare import build_input
+from benchmark.run import require_msa, validate_outputs
+from benchmark.report import build
+from benchmark.score import fit, rmsd
+from benchmark.score import score
+from Bio.PDB.mmcifio import MMCIFIO
+
+
+class FitTests(unittest.TestCase):
+    def test_multiple_shapes_and_transforms(self):
+        rng = np.random.default_rng(72)
+        for n in (3, 7, 59, 201):
+            points = rng.normal(size=(n, 3))
+            q, _ = np.linalg.qr(rng.normal(size=(3, 3)))
+            q[:, 0] *= np.linalg.det(q)
+            target = points @ q + rng.normal(size=3)
+            rotation, translation = fit(points, target)
+            self.assertLess(rmsd(points @ rotation + translation, target), 1e-10)
+
+    def test_reflection_is_not_allowed(self):
+        p = np.random.default_rng(12).normal(size=(15, 3))
+        target = p * [-1, 1, 1]
+        rotation, translation = fit(p, target)
+        self.assertGreater(np.linalg.det(rotation), .99)
+        self.assertGreater(rmsd(p @ rotation + translation, target), .1)
+
+    def test_invalid_fit_fails(self):
+        for p in (np.zeros((2, 3)), np.zeros((5, 3))):
+            with self.assertRaises(ValueError):
+                fit(p, p)
+
+
+class InputTests(unittest.TestCase):
+    def metadata(self, sequence):
+        return {'_struct_asym.id': ['Z', 'Q'], '_struct_asym.entity_id': ['7', '9'],
+                '_entity_poly.entity_id': ['7'], '_entity_poly.type': ['polypeptide(L)'],
+                '_entity_poly.nstd_monomer': ['no'],
+                '_entity_poly.pdbx_seq_one_letter_code_can': [sequence],
+                '_pdbx_entity_nonpoly.entity_id': ['9'], '_pdbx_entity_nonpoly.comp_id': ['ATP']}
+
+    def test_distinct_sequences_and_nonstandard_chain_ids(self):
+        for sequence in ('ACDEFG', 'MKWVTFISLLFLFSSAYS'):
+            task = {'id': 'independent', 'protein_asym': 'Z', 'ligands': [{'asym': 'Q', 'ccd': 'ATP'}]}
+            result = build_input(task, self.metadata(sequence))
+            self.assertEqual(result['sequences'][0]['proteinChain']['sequence'], sequence)
+            self.assertEqual(result['sequences'][1]['ligand']['ligand'], 'CCD_ATP')
+            self.assertNotIn('templatesPath', json.dumps(result))
+            self.assertNotIn('Cartn', json.dumps(result))
+
+    def test_bad_ligand_and_modified_protein_fail(self):
+        task = {'id': 'bad', 'protein_asym': 'Z', 'ligands': [{'asym': 'Q', 'ccd': 'GDP'}]}
+        with self.assertRaises(ValueError):
+            build_input(task, self.metadata('ACDE'))
+        task['ligands'] = []
+        with self.assertRaises(ValueError):
+            build_input(task, self.metadata('ACX'))
+
+    def test_covalent_position_comes_from_metadata(self):
+        for position in (2, 6):
+            cif = self.metadata('ACDEFC')
+            fields = {'conn_type_id': 'covale', 'ptnr1_label_asym_id': 'Z',
+                      'ptnr2_label_asym_id': 'Q', 'ptnr1_label_seq_id': str(position),
+                      'ptnr2_label_seq_id': '.', 'ptnr1_label_atom_id': 'SG',
+                      'ptnr2_label_atom_id': 'C7', 'ptnr1_symmetry': '1_555',
+                      'ptnr2_symmetry': '1_555'}
+            cif.update({'_struct_conn.'+k: [v] for k, v in fields.items()})
+            task = {'id': 'test', 'protein_asym': 'Z', 'ligands': [{'asym': 'Q', 'ccd': 'ATP'}]}
+            result = build_input(task, cif)
+            self.assertEqual(result['covalent_bonds'][0]['position1'], position)
+            task['ligands'] = []
+            with self.assertRaises(ValueError):
+                build_input(task, cif)
+
+
+class FailureTests(unittest.TestCase):
+    def test_msa_failure_visible(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            msa = root / 'hits.a3m'
+            inp = root / 'input.json'
+            inp.write_text(json.dumps([{'sequences': [{'proteinChain': {
+                'sequence': 'ACDE', 'unpairedMsaPath': str(msa)}}]}]))
+            msa.write_text('>query\nACDE\n')
+            with self.assertRaises(ValueError):
+                require_msa(inp)
+            msa.write_text('>query\nACDE\n>hit\nAC-E\n')
+            require_msa(inp)
+            msa.write_text('>query\nACDF\n>hit\nAC-E\n')
+            with self.assertRaises(ValueError):
+                require_msa(inp)
+
+    def test_missing_output_and_upstream_errors_fail(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            with self.assertRaises(RuntimeError):
+                validate_outputs(root, 'different_target', 18, 2)
+            (root / 'ERR').mkdir()
+            (root / 'ERR' / 'failed.txt').write_text('CUDA out of memory')
+            with self.assertRaisesRegex(RuntimeError, 'reported errors'):
+                validate_outputs(root, 'different_target', 18, 2)
+
+    def test_checkpoint_blocker_clears_when_weight_arrives(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            output, cache = root/'output', root/'cache'
+            (output/'first-v2').mkdir(parents=True)
+            cache.mkdir()
+            manifest = {'models': {'v2': {'name': 'different_official_model',
+                                         'training_cutoff': '2021-09-30'}},
+                        'tasks': [{'id': 'first', 'pdb': '1AAA', 'models': ['v2'],
+                                   'notes': ''},
+                                  {'id': 'second', 'pdb': '2BBB', 'models': ['v2'],
+                                   'notes': ''}]}
+            audit = [{'id': t['id'], 'release_date': '2020-01-01',
+                      'split': {'v2': 'retrospective'}} for t in manifest['tasks']]
+            audit_file = root/'audit.json'
+            audit_file.write_text(json.dumps(audit))
+            (output/'first-v2'/'metrics.json').write_text(json.dumps({
+                'model': manifest['models']['v2'], 'status': 'failed',
+                'error': 'HTTP Error 403', 'slurm_job_id': '9',
+                'stages_seconds': {'resource_download': 1}}))
+            self.assertEqual(build(manifest, output, audit_file, checkpoint_root=cache)[1]['status'],
+                             'blocked_by_checkpoint')
+            (cache/'different_official_model.pt').write_bytes(b'weight-received')
+            self.assertEqual(build(manifest, output, audit_file, checkpoint_root=cache)[1]['status'],
+                             'not_run')
+
+
+class ScoringTests(unittest.TestCase):
+    def write_structure(self, path, n, *, predicted=False, ligand_shift=0, omit_ligand=False):
+        rng = np.random.default_rng(n)
+        points = rng.normal(size=(n, 3)) * 2
+        metadata = InputTests().metadata('A' * n)
+        metadata['data_'] = 'independent'
+        metadata['_pdbx_entity_nonpoly.comp_id'] = ['ATP']
+        columns = ['group_PDB', 'id', 'type_symbol', 'label_atom_id', 'label_alt_id',
+                   'label_comp_id', 'label_asym_id', 'label_entity_id', 'label_seq_id',
+                   'auth_seq_id', 'occupancy', 'Cartn_x', 'Cartn_y', 'Cartn_z', 'pdbx_PDB_model_num']
+        data = []
+        for i, point in enumerate(points, 1):
+            if not predicted and i == 2:
+                continue  # An experimental unresolved residue must not enter RMSD.
+            xyz = point + (np.array([8., 1., -3.]) if predicted else 0)
+            data.append(['ATOM', str(len(data)+1), 'C', 'CA', '.', 'ALA',
+                         'A' if predicted else 'Z', '1' if predicted else '7', str(i), str(i+40),
+                         '1', *map(str, xyz), '1'])
+        for j, point in enumerate(([0., 0., 0.], [1., 0., 0.])):
+            if omit_ligand and j == 1:
+                continue
+            xyz = np.array(point) + (np.array([8.+ligand_shift, 1., -3.]) if predicted else 0)
+            data.append(['HETATM', str(len(data)+1), 'C', f'C{j+1}', '.', 'ATP',
+                         'L2' if predicted else 'Q', '2' if predicted else '9', '.', '401',
+                         '1', *map(str, xyz), '1'])
+        metadata.update({'_atom_site.'+col: [row[i] for row in data] for i, col in enumerate(columns)})
+        writer = MMCIFIO()
+        writer.set_dict(metadata)
+        writer.save(str(path))
+
+    def test_missing_reference_residues_and_displaced_ligands(self):
+        task = {'id': 'unseen', 'protein_asym': 'Z', 'ligands': [{'asym': 'Q', 'ccd': 'ATP'}],
+                'focus_ccd': 'ATP'}
+        for n in (5, 17):
+            with tempfile.TemporaryDirectory() as root:
+                ref, pred = Path(root)/'ref.cif', Path(root)/'pred.cif'
+                self.write_structure(ref, n)
+                self.write_structure(pred, n, predicted=True, ligand_shift=2.)
+                result = score(task, ref, pred)
+                self.assertEqual(result['n_aligned_ca'], n-1)
+                self.assertEqual(result['n_unobserved_reference_ca'], 1)
+                self.assertLess(result['ca_rmsd'], 1e-10)
+                self.assertAlmostEqual(result['ligands'][0]['heavy_atom_rmsd'], 2.)
+                self.assertTrue(result['ligands'][0]['contacts_lost'] or result['ligands'][0]['contacts_gained'])
+                self.write_structure(pred, n, predicted=True, omit_ligand=True)
+                with self.assertRaisesRegex(ValueError, 'Missing predicted ligand atoms'):
+                    score(task, ref, pred)
+
+
+if __name__ == '__main__':
+    unittest.main()

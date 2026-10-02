@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=kras-benchmark
+#SBATCH --partition=gpu
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --gres=gpu:l40s:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=56G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/benchmark-%j.out
+
+set -euo pipefail
+cd "${SLURM_SUBMIT_DIR}"
+export PATH="${HOME}/.pixi/bin:${PATH}"
+export PROTENIX_ROOT_DIR="${SLURM_SUBMIT_DIR}/data/protenix"
+export TORCH_EXTENSIONS_DIR="${SLURM_SUBMIT_DIR}/data/torch_extensions"
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK}"
+export PYTHONUNBUFFERED=1
+if [[ $# != 3 ]]; then
+    echo "Usage: sbatch scripts/benchmark.sbatch TASK MODEL OUTPUT" >&2
+    exit 2
+fi
+mkdir -p logs
+telemetry="logs/gpu-${SLURM_JOB_ID}.csv"
+nvidia-smi --query-gpu=timestamp,uuid,memory.used,utilization.gpu,utilization.memory,power.draw --format=csv -l 1 > "$telemetry" &
+monitor_pid=$!
+trap 'kill "$monitor_pid" 2>/dev/null || true; wait "$monitor_pid" 2>/dev/null || true' EXIT
+/usr/bin/time -v -o "logs/time-${SLURM_JOB_ID}.txt" \
+    pixi run --locked python -m benchmark.run "$1" "$2" "$3"
