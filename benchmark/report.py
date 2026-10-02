@@ -90,8 +90,9 @@ def build(manifest, root, audit_path='data/inputs/audit.json', reference_root='d
             cpu = directory / 'cpu.csv'
             if cpu.exists():
                 with cpu.open() as stream:
-                    vals = [int(row['rss_bytes']) for row in csv.DictReader(stream)]
-                item['process_tree_rss_peak_bytes'] = max(vals) if vals else None
+                    samples = list(csv.DictReader(stream))
+                item['process_tree_rss_peak_bytes'] = max((int(row['rss_bytes']) for row in samples), default=None)
+                item['sampled_cpu_percent_peak'] = max((float(row['cpu_percent']) for row in samples), default=None)
             if metrics['status'] == 'success':
                 checkpoint = Path(checkpoint_root) / (manifest['models'][model]['name'] + '.pt')
                 if checkpoint.exists():
@@ -132,7 +133,8 @@ if __name__ == '__main__':
         writer.writerow(('task', 'pdb', 'model', 'status', 'release_date', 'split',
                          'aligned_ca', 'ca_rmsd_A', 'pocket_ca_rmsd_A',
                          'focus_ligand_rmsd_A', 'preprocessing_s', 'model_forward_s',
-                         'total_s', 'cpu_rss_peak_bytes', 'gpu_memory_peak_mib',
+                         'total_s', 'cpu_rss_peak_bytes', 'cpu_percent_peak_sampled',
+                         'gpu_memory_peak_mib',
                          'gpu_utilization_mean_percent', 'gpu_hours_process', 'slurm_job_id'))
         for item in table:
             task = next(t for t in manifest['tasks'] if t['id'] == item['task'])
@@ -146,6 +148,7 @@ if __name__ == '__main__':
                                  focus.get('heavy_atom_rmsd'), stages.get('preprocessing'),
                                  stages.get('model_forward'), item.get('total_seconds'),
                                  item.get('process_tree_rss_peak_bytes'),
+                                 item.get('sampled_cpu_percent_peak'),
                                  item.get('gpu_memory_peak_mib'),
                                  item.get('gpu_utilization_mean_percent'),
                                  item.get('gpu_hours_process'), item.get('job_id')))

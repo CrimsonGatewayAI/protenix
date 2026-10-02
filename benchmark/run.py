@@ -78,17 +78,22 @@ def main():
     def monitor_cpu():
         import psutil
         process = psutil.Process()
+        tracked = {process.pid: process}
         with (out / 'cpu.csv').open('w') as handle:
             handle.write('elapsed_seconds,rss_bytes,cpu_percent\n')
             while not stop_monitor.is_set():
                 rss = 0
                 cpu = 0.
-                for child in [process] + process.children(recursive=True):
+                live = [process] + process.children(recursive=True)
+                for child in live:
+                    tracked.setdefault(child.pid, child)
                     try:
-                        rss += child.memory_info().rss
-                        cpu += child.cpu_percent()
+                        rss += tracked[child.pid].memory_info().rss
+                        cpu += tracked[child.pid].cpu_percent()
                     except psutil.NoSuchProcess:
                         continue  # A worker exited between enumeration and sampling.
+                tracked = {child.pid: tracked[child.pid] for child in live
+                           if child.pid in tracked}
                 handle.write(f'{time.monotonic()-started},{rss},{cpu}\n')
                 handle.flush()
                 stop_monitor.wait(1)

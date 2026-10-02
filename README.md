@@ -25,7 +25,7 @@ mkdir -p logs
 sbatch scripts/benchmark.sbatch wt_gdp v2 output/wt_gdp-v2
 ```
 
-先核对首个任务的 `metrics.json` 为 `success`、`ERR/` 为空、MSA 和 CIF 均存在，再逐项提交清单里其余任务，模型键为 `v2` 或 `v1`。请勿并发执行，以便比较单张 L40S 的算力。作业由 Slurm 分配 AWS GPU；不在登录节点运行推理。上游 CLI 可能捕获异常并以退出码 0 返回，因此 `benchmark.run` 还要求真实的 MSA 命中、完整结构数、有限坐标和无错误文件，失败时以非零状态退出。GPU 利用率/显存逐秒写入 `logs/gpu-<jobid>.csv`，GNU time 写入 `logs/time-<jobid>.txt`，进程树 RSS 写入运行目录 `cpu.csv`。`metrics.json` 区分预处理、前向传播、总时间、首次资源下载和 CUDA 扩展构建/加载；首次编译对前向传播也可能另有开销。
+先核对首个任务的 `metrics.json` 为 `success`、`ERR/` 为空、MSA 和 CIF 均存在，再逐项提交清单里其余任务，模型键为 `v2` 或 `v1`。请勿并发执行，以便比较单张 L40S 的算力。作业由 Slurm 分配 AWS GPU；不在登录节点运行推理。上游 CLI 可能捕获异常并以退出码 0 返回，因此 `benchmark.run` 还要求真实的 MSA 命中、完整结构数、有限坐标和无错误文件，失败时以非零状态退出。GPU 利用率/显存逐秒写入 `logs/gpu-<jobid>.csv`，GNU time 写入 `logs/time-<jobid>.txt`，进程树 RSS 与 CPU 使用率每秒写入运行目录 `cpu.csv`；逐秒采样峰值只作为观测值。`metrics.json` 区分预处理、前向传播、总时间、首次资源下载和 CUDA 扩展构建/加载；首次编译对前向传播也可能另有开销。
 
 ```bash
 pixi run --locked python -m benchmark.report
