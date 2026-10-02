@@ -81,6 +81,8 @@ def build(manifest, root, audit_path='data/inputs/audit.json', reference_root='d
                          'gpu_peak_allocated_bytes': metrics.get('gpu_peak_allocated_bytes'),
                          'gpu_peak_reserved_bytes': metrics.get('gpu_peak_reserved_bytes'),
                          'error': metrics.get('error')})
+            if 'checkpoint_source' in metrics:
+                item['checkpoint_source'] = metrics['checkpoint_source']
             item['slurm_accounting'] = sacct(metrics['slurm_job_id'])
             time_log = Path('logs') / f"time-{metrics['slurm_job_id']}.txt"
             if time_log.exists():

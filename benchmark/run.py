@@ -113,6 +113,22 @@ def main():
         import torch
         if not torch.cuda.is_available():
             raise RuntimeError('CUDA unavailable on allocated GPU node')
+        checkpoint = Path(os.environ.get('PROTENIX_ROOT_DIR', str(Path.home()))) / 'checkpoint' / (
+            manifest['models'][args.model]['name'] + '.pt')
+        source_file = checkpoint.with_suffix('.source.json')
+        if source_file.exists():
+            source = json.loads(source_file.read_text())
+            with checkpoint.open('rb') as stream:
+                digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+            if digest != source['sha256']:
+                raise ValueError(f'Checkpoint SHA-256 mismatch: {checkpoint}')
+            safe = torch.load(checkpoint, map_location='cpu', weights_only=True, mmap=True)
+            if set(safe) != {'model'} or not safe['model']:
+                raise ValueError('Checkpoint has no model state dictionary')
+            metrics['checkpoint_source'] = source
+            metrics['checkpoint_sha256'] = digest
+            (out / 'checkpoint.source.json').write_text(json.dumps(source, indent=2) + '\n')
+            del safe
         from torch.utils import cpp_extension
         compile_extension = cpp_extension._jit_compile
         cpp_extension._jit_compile = lambda *a, **kw: timed('extension_build_load', compile_extension, *a, **kw)

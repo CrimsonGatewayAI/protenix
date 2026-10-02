@@ -8,6 +8,7 @@ import numpy as np
 from benchmark.prepare import build_input
 from benchmark.run import require_msa, validate_outputs
 from benchmark.report import build
+from benchmark.compare import paired
 from benchmark.score import fit, rmsd
 from benchmark.score import score
 from Bio.PDB.mmcifio import MMCIFIO
@@ -180,6 +181,28 @@ class ScoringTests(unittest.TestCase):
                 self.write_structure(pred, n, predicted=True, omit_ligand=True)
                 with self.assertRaisesRegex(ValueError, 'Missing predicted ligand atoms'):
                     score(task, ref, pred)
+
+    def test_paired_comparison_is_generic_and_exposes_failures(self):
+        manifest = {'models': {'new': {}, 'old': {}},
+                    'tasks': [{'id': 'arbitrary', 'pdb': '1XYZ', 'focus_ccd': 'ATP',
+                               'models': ['new', 'old']},
+                              {'id': 'another', 'pdb': '2XYZ', 'focus_ccd': 'GDP',
+                               'models': ['new', 'old']}]}
+        def result(task, model, rmsd):
+            return {'task': task, 'model': model, 'status': 'success',
+                    'scores': [{'n_aligned_ca': 12, 'ca_rmsd': rmsd,
+                                'pocket_ca_rmsd': rmsd/2,
+                                'ligands': [{'ccd': 'ATP' if task == 'arbitrary' else 'GDP',
+                                             'heavy_atom_rmsd': rmsd*2}]}],
+                    'stages_seconds': {'model_forward': 7.}}
+        summary = [result('arbitrary', 'new', .8), result('arbitrary', 'old', 1.2),
+                   result('another', 'old', 2.)]
+        summary.append({'task': 'another', 'model': 'new', 'status': 'failed'})
+        comparison = paired(summary, manifest, 'new', 'old')
+        self.assertAlmostEqual(comparison[0]['delta_ca_rmsd_A'], -.4)
+        self.assertAlmostEqual(comparison[0]['delta_focus_ligand_rmsd_A'], -.8)
+        self.assertEqual(comparison[1]['left_status'], 'failed')
+        self.assertNotIn('delta_ca_rmsd_A', comparison[1])
 
 
 if __name__ == '__main__':
