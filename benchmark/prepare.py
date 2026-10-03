@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.request import urlopen
 
 from Bio.PDB.MMCIF2Dict import MMCIF2Dict
+from benchmark.paths import data_root
 
 
 def rows(cif, category):
@@ -87,8 +88,10 @@ def build_input(task, cif):
     return {'name': task['id'], 'sequences': seqs, 'covalent_bonds': bonds}
 
 
-def prepare(manifest, destination, reference_root='data/references', ccd_root='data/ccd'):
+def prepare(manifest, destination, reference_root=None, ccd_root=None):
     destination = Path(destination)
+    reference_root = data_root() / 'references' if reference_root is None else Path(reference_root)
+    ccd_root = data_root() / 'ccd' if ccd_root is None else Path(ccd_root)
     destination.mkdir(parents=True, exist_ok=True)
     audit = []
     ids = [task['id'] for task in manifest['tasks']]
@@ -128,9 +131,9 @@ def prepare(manifest, destination, reference_root='data/references', ccd_root='d
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--manifest', default='benchmark/tasks.json')
-    parser.add_argument('--output', default='data/inputs')
-    parser.add_argument('--reference-root', default='data/references')
-    parser.add_argument('--ccd-root', default='data/ccd')
+    parser.add_argument('--output', default=str(data_root() / 'inputs'))
+    parser.add_argument('--reference-root', default=str(data_root() / 'references'))
+    parser.add_argument('--ccd-root', default=str(data_root() / 'ccd'))
     args = parser.parse_args()
     prepare(json.loads(Path(args.manifest).read_text()), args.output,
             args.reference_root, args.ccd_root)

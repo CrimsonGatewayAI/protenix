@@ -14,6 +14,7 @@ from Bio.SeqUtils import seq1
 from scipy.spatial import cKDTree
 
 from benchmark.prepare import rows, build_input
+from benchmark.paths import data_root
 
 
 def atoms(cif, *, asym=None, entity=None):
@@ -208,7 +209,7 @@ if __name__ == '__main__':
     parser.add_argument('prediction')
     parser.add_argument('output')
     parser.add_argument('--manifest', default='benchmark/tasks.json')
-    parser.add_argument('--reference-root', default='data/references')
+    parser.add_argument('--reference-root', default=str(data_root() / 'references'))
     args = parser.parse_args()
     manifest = json.loads(Path(args.manifest).read_text())
     task = next(t for t in manifest['tasks'] if t['id'] == args.task)

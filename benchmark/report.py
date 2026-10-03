@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 
 from benchmark.score import score
+from benchmark.paths import data_root, output_root, logs_root
 
 
 def sacct(job_id):
@@ -38,9 +39,12 @@ def gpu_telemetry(path):
             'gpu_samples': len(rows)}
 
 
-def build(manifest, root, audit_path='data/inputs/audit.json', reference_root='data/references',
-          checkpoint_root='data/protenix/checkpoint'):
+def build(manifest, root, audit_path=None, reference_root=None,
+          checkpoint_root=None):
     table = []
+    audit_path = data_root() / 'inputs/audit.json' if audit_path is None else Path(audit_path)
+    reference_root = data_root() / 'references' if reference_root is None else Path(reference_root)
+    checkpoint_root = data_root() / 'protenix/checkpoint' if checkpoint_root is None else Path(checkpoint_root)
     audit = {t['id']: t for t in json.loads(Path(audit_path).read_text())}
     model_blockers = {}
     weight_hashes = {}
@@ -84,11 +88,11 @@ def build(manifest, root, audit_path='data/inputs/audit.json', reference_root='d
             if 'checkpoint_source' in metrics:
                 item['checkpoint_source'] = metrics['checkpoint_source']
             item['slurm_accounting'] = sacct(metrics['slurm_job_id'])
-            time_log = Path('logs') / f"time-{metrics['slurm_job_id']}.txt"
+            time_log = logs_root() / f"time-{metrics['slurm_job_id']}.txt"
             if time_log.exists():
                 item['gnu_time_log'] = str(time_log)
                 item['gnu_time'] = time_log.read_text()
-            item.update(gpu_telemetry(Path('logs') / f"gpu-{metrics['slurm_job_id']}.csv"))
+            item.update(gpu_telemetry(logs_root() / f"gpu-{metrics['slurm_job_id']}.csv"))
             cpu = directory / 'cpu.csv'
             if cpu.exists():
                 with cpu.open() as stream:
@@ -119,12 +123,12 @@ def build(manifest, root, audit_path='data/inputs/audit.json', reference_root='d
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--manifest', default='benchmark/tasks.json')
-    parser.add_argument('--output-root', default='output')
-    parser.add_argument('--report', default='output/summary.json')
-    parser.add_argument('--csv', default='output/summary.csv')
-    parser.add_argument('--audit', default='data/inputs/audit.json')
-    parser.add_argument('--reference-root', default='data/references')
-    parser.add_argument('--checkpoint-root', default='data/protenix/checkpoint')
+    parser.add_argument('--output-root', default=str(output_root()))
+    parser.add_argument('--report', default=str(output_root() / 'summary.json'))
+    parser.add_argument('--csv', default=str(output_root() / 'summary.csv'))
+    parser.add_argument('--audit', default=str(data_root() / 'inputs/audit.json'))
+    parser.add_argument('--reference-root', default=str(data_root() / 'references'))
+    parser.add_argument('--checkpoint-root', default=str(data_root() / 'protenix/checkpoint'))
     args = parser.parse_args()
     manifest = json.loads(Path(args.manifest).read_text())
     table = build(manifest, Path(args.output_root), args.audit, args.reference_root,

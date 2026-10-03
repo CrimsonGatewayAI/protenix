@@ -1,7 +1,9 @@
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -10,6 +12,7 @@ from benchmark.run import require_msa, validate_outputs
 from benchmark.report import build
 from benchmark.compare import paired
 from benchmark.repeats import aggregate, collect, run_directory
+from benchmark.paths import artifact_root, data_root, logs_root, output_root, run_root
 from benchmark.score import fit, rmsd
 from benchmark.score import score
 from Bio.PDB.MMCIF2Dict import MMCIF2Dict
@@ -313,6 +316,25 @@ class RepeatTests(unittest.TestCase):
             self.assertEqual(run_directory(root, 'target', 'v1', 11, 11), legacy)
             self.assertEqual(run_directory(root, 'target', 'v1', 12, 11),
                              root/'target-v1-seed12')
+
+
+class PathTests(unittest.TestCase):
+    def test_artifact_and_run_overrides_use_distinct_absolute_roots(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            with patch.dict(os.environ, {'PROTENIX_ARTIFACTS_DIR': str(root/'storage'),
+                                         'PROTENIX_RUN_DIR': str(root/'runs'/'trial')}, clear=False):
+                self.assertEqual(artifact_root(), root/'storage')
+                self.assertEqual(data_root(), root/'storage'/'data')
+                self.assertEqual(run_root(), root/'runs'/'trial')
+                self.assertEqual(output_root(), root/'runs'/'trial'/'output')
+                self.assertEqual(logs_root(), root/'runs'/'trial'/'logs')
+
+    def test_relative_artifact_and_run_overrides_fail(self):
+        for key in ('PROTENIX_ARTIFACTS_DIR', 'PROTENIX_RUN_DIR'):
+            with patch.dict(os.environ, {key: 'relative/path'}, clear=False):
+                with self.assertRaisesRegex(ValueError, 'must be absolute'):
+                    artifact_root() if key == 'PROTENIX_ARTIFACTS_DIR' else run_root()
 
 
 if __name__ == '__main__':

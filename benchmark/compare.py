@@ -3,6 +3,7 @@ import argparse
 import csv
 import json
 from pathlib import Path
+from benchmark.paths import output_root
 
 
 def paired(summary, manifest, left, right):
@@ -44,11 +45,11 @@ def paired(summary, manifest, left, right):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--summary', default='output/summary.json')
+    parser.add_argument('--summary', default=str(output_root() / 'summary.json'))
     parser.add_argument('--manifest', default='benchmark/tasks.json')
     parser.add_argument('--left', default='v2')
     parser.add_argument('--right', default='v1')
-    parser.add_argument('--csv', default='output/comparison-internal.csv')
+    parser.add_argument('--csv', default=str(output_root() / 'comparison-internal.csv'))
     args = parser.parse_args()
     rows = paired(json.loads(Path(args.summary).read_text()),
                   json.loads(Path(args.manifest).read_text()), args.left, args.right)

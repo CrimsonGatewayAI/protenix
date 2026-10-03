@@ -8,6 +8,7 @@ import subprocess
 import time
 import traceback
 import threading
+from benchmark.paths import data_root
 
 
 def require_msa(path):
@@ -57,7 +58,7 @@ def main():
     parser.add_argument('output')
     parser.add_argument('--seed', type=int)
     parser.add_argument('--manifest', default='benchmark/tasks.json')
-    parser.add_argument('--input-dir', default='data/inputs')
+    parser.add_argument('--input-dir', default=str(data_root() / 'inputs'))
     args = parser.parse_args()
     manifest = json.loads(Path(args.manifest).read_text())
     task = next(t for t in manifest['tasks'] if t['id'] == args.task)
@@ -118,7 +119,7 @@ def main():
         import torch
         if not torch.cuda.is_available():
             raise RuntimeError('CUDA unavailable on allocated GPU node')
-        checkpoint = Path(os.environ.get('PROTENIX_ROOT_DIR', str(Path.home()))) / 'checkpoint' / (
+        checkpoint = Path(os.environ.get('PROTENIX_ROOT_DIR', str(data_root() / 'protenix'))) / 'checkpoint' / (
             manifest['models'][args.model]['name'] + '.pt')
         source_file = checkpoint.with_suffix('.source.json')
         if source_file.exists():

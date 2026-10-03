@@ -8,6 +8,7 @@ from pathlib import Path
 
 from benchmark.report import gpu_telemetry
 from benchmark.score import score
+from benchmark.paths import data_root, output_root, logs_root
 
 
 def run_directory(root, task, model, seed, first_seed):
@@ -25,8 +26,9 @@ def summarize(values):
             'min': min(values), 'max': max(values), 'n': len(values)}
 
 
-def collect(manifest, root, reference_root=Path('data/references'),
-            input_root=Path('data/inputs')):
+def collect(manifest, root, reference_root=None, input_root=None):
+    reference_root = data_root() / 'references' if reference_root is None else Path(reference_root)
+    input_root = data_root() / 'inputs' if input_root is None else Path(input_root)
     seeds = manifest['parameters']['seeds']
     if len(seeds) != len(set(seeds)) or not seeds:
         raise ValueError('Expected distinct nonempty seeds')
@@ -59,7 +61,7 @@ def collect(manifest, root, reference_root=Path('data/references'),
                             'preprocessing_s': metrics.get('stages_seconds', {}).get('preprocessing'),
                             'model_forward_s': metrics.get('stages_seconds', {}).get('model_forward'),
                             'gpu_hours': metrics.get('allocated_gpu_hours_process')})
-                row.update(gpu_telemetry(Path('logs') / f"gpu-{metrics['slurm_job_id']}.csv"))
+                row.update(gpu_telemetry(logs_root() / f"gpu-{metrics['slurm_job_id']}.csv"))
                 cpu_path = directory / 'cpu.csv'
                 if cpu_path.exists():
                     with cpu_path.open() as handle:
@@ -159,7 +161,7 @@ def markdown(performance, resources, rate):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--manifest', default='benchmark/tasks.json')
-    parser.add_argument('--output-root', default='output')
+    parser.add_argument('--output-root', default=str(output_root()))
     parser.add_argument('--usd-hour', type=float)
     args = parser.parse_args()
     if args.usd_hour is not None and args.usd_hour <= 0:
