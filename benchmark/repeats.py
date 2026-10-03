@@ -125,37 +125,46 @@ def format_stat(value, digits=2, show_range=False):
     return display
 
 
-def markdown(performance, resources, rate):
-    lines = ['# 预测性能', '',
-             '| 任务 | 模型 | 成功/计划 | 对齐残基数 | KRAS Cα RMSD Å | 结合部位 Cα RMSD Å | GDP/药物 RMSD Å | 纳米抗体位置 RMSD Å | 接触 F1 |',
-             '|---|---|---:|---:|---:|---:|---:|---:|---:|']
-    for row in performance:
-        lines.append('| ' + ' | '.join((row['task'], row['model'], f"{row['success']}/{row['planned']}",
-                   format_stat(row['aligned_ca'], 0),
-                   format_stat(row['ca_rmsd_A'], show_range=True),
-                   format_stat(row['pocket_ca_rmsd_A'], show_range=True),
-                   format_stat(row['focus_rmsd_A'], show_range=True),
-                   format_stat(row['partner_ca_rmsd_A'], show_range=True),
-                   format_stat(row['interface_f1'], show_range=True))) + ' |')
-    lines += ['', '# 资源消耗', '',
-              '| 任务 | 模型 | 实测/计划 | 预处理秒 | 推理秒 | 总秒 | CPU峰值% | RSS峰值 GiB | GPU显存峰值 MiB | GPU利用率% | GPU小时合计 | 进程费用估算 USD |',
-              '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|']
-    for row in resources:
-        rss = row['rss_peak_bytes']
-        lines.append('| ' + ' | '.join((row['task'], row['model'], f"{row['observed']}/{row['planned']}",
-                   format_stat(row['preprocessing_s']), format_stat(row['model_forward_s']),
-                   format_stat(row['total_s']), format_stat(row['cpu_percent_peak'], 0),
-                   '—' if rss is None else f"{rss['max']/2**30:.2f}",
-                   '—' if row['gpu_memory_peak_mib'] is None else
-                   f"{row['gpu_memory_peak_mib']['max']:.0f}",
-                   format_stat(row['gpu_utilization_mean_percent'], 0),
-                   f"{row['gpu_hours_total']:.3f}",
-                   '—' if row['process_cost_usd_estimate'] is None else
-                   f"{row['process_cost_usd_estimate']:.3f}")) + ' |')
-    lines += ['', f"费用单价：{'待核实' if rate is None else f'USD {rate:.5f}/实例小时'}；表内费用仅按作业进程时长估算，节点启动、空闲与关机费用另计。",
-              '均值 ± 样本标准差；成功/计划明确保留失败或未运行的种子。CPU 100% 约等于占满一个核心；峰值为逐秒采样值。',
-              'Nanobody84 是研究用分子；抗体位置和小分子 RMSD 不可直接比较。']
-    return '\n'.join(lines) + '\n'
+PERFORMANCE_COLUMNS = ('任务', '实验结构', '模型', '成功/计划', '对齐残基数',
+                       'KRAS Cα RMSD Å', '结合部位 Cα RMSD Å', 'GDP/药物 RMSD Å',
+                       '纳米抗体位置 RMSD Å', '接触 F1')
+RESOURCE_COLUMNS = ('任务', '实验结构', '模型', '实测/计划', '预处理秒', '推理秒', '总秒',
+                    'CPU峰值%', 'RSS峰值 GiB', 'GPU显存峰值 MiB', 'GPU利用率%',
+                    'GPU小时合计', '进程费用估算 USD')
+
+
+def write_summary_csvs(performance, resources, root):
+    """Write two complete, human-readable UTF-8 CSV summary tables."""
+    with (root / 'performance.csv').open('w', newline='', encoding='utf-8-sig') as handle:
+        writer = csv.writer(handle)
+        writer.writerow(PERFORMANCE_COLUMNS)
+        for row in performance:
+            writer.writerow((row['task'], row['pdb'], row['model'],
+                             f"{row['success']}/{row['planned']}",
+                             format_stat(row['aligned_ca'], 0),
+                             format_stat(row['ca_rmsd_A'], show_range=True),
+                             format_stat(row['pocket_ca_rmsd_A'], show_range=True),
+                             format_stat(row['focus_rmsd_A'], show_range=True),
+                             format_stat(row['partner_ca_rmsd_A'], show_range=True),
+                             format_stat(row['interface_f1'], show_range=True)))
+    with (root / 'resources.csv').open('w', newline='', encoding='utf-8-sig') as handle:
+        writer = csv.writer(handle)
+        writer.writerow(RESOURCE_COLUMNS)
+        for row in resources:
+            rss = row['rss_peak_bytes']
+            gpu_memory = row['gpu_memory_peak_mib']
+            cost = row['process_cost_usd_estimate']
+            writer.writerow((row['task'], row['pdb'], row['model'],
+                             f"{row['observed']}/{row['planned']}",
+                             format_stat(row['preprocessing_s']),
+                             format_stat(row['model_forward_s']),
+                             format_stat(row['total_s']),
+                             format_stat(row['cpu_percent_peak'], 0),
+                             '—' if rss is None else f"{rss['max']/2**30:.2f}",
+                             '—' if gpu_memory is None else f"{gpu_memory['max']:.0f}",
+                             format_stat(row['gpu_utilization_mean_percent'], 0),
+                             f"{row['gpu_hours_total']:.3f}",
+                             '—' if cost is None else f'{cost:.3f}'))
 
 
 if __name__ == '__main__':
@@ -173,10 +182,10 @@ if __name__ == '__main__':
     (root / 'runs.json').write_text(json.dumps(runs, indent=2) + '\n')
     (root / 'performance.json').write_text(json.dumps(performance, indent=2) + '\n')
     (root / 'resources.json').write_text(json.dumps(resources, indent=2) + '\n')
-    (root / 'two-tables.md').write_text(markdown(performance, resources, args.usd_hour))
+    write_summary_csvs(performance, resources, root)
     with (root / 'runs.csv').open('w', newline='') as handle:
         fields = sorted({key for row in runs for key in row} - {'checkpoint_source'})
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         writer.writerows({key: value for key, value in row.items() if key in fields} for row in runs)
-    print(markdown(performance, resources, args.usd_hour))
+    print(f"Wrote {len(performance)} rows each to {root / 'performance.csv'} and {root / 'resources.csv'}")

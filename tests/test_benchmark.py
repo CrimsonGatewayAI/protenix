@@ -1,3 +1,4 @@
+import csv
 import json
 import os
 from pathlib import Path
@@ -11,7 +12,8 @@ from benchmark.prepare import build_input
 from benchmark.run import require_msa, validate_outputs
 from benchmark.report import build
 from benchmark.compare import paired
-from benchmark.repeats import aggregate, collect, run_directory
+from benchmark.repeats import (PERFORMANCE_COLUMNS, RESOURCE_COLUMNS, aggregate,
+                               collect, run_directory, write_summary_csvs)
 from benchmark.paths import artifact_root, data_root, logs_root, output_root, run_root
 from benchmark.score import fit, rmsd
 from benchmark.score import score
@@ -270,6 +272,36 @@ class ScoringTests(unittest.TestCase):
 
 
 class RepeatTests(unittest.TestCase):
+    def test_summary_csvs_keep_all_columns_and_missing_metrics(self):
+        manifest = {'tasks': [{'id': 'ligand', 'pdb': '1ABC', 'models': ['v2']},
+                              {'id': 'partner', 'pdb': '2XYZ', 'models': ['v1'],
+                               'partner_asym': 'N'}]}
+        runs = [{'task': 'ligand', 'model': 'v2', 'status': 'success',
+                 'aligned_ca': 42, 'ca_rmsd_A': 1., 'focus_rmsd_A': 2.,
+                 'interface_f1': .5, 'total_s': 20., 'gpu_hours': 20/3600},
+                {'task': 'ligand', 'model': 'v2', 'status': 'failed',
+                 'total_s': 10., 'gpu_hours': 10/3600},
+                {'task': 'partner', 'model': 'v1', 'status': 'success',
+                 'aligned_ca': 51, 'partner_ca_rmsd_A': 3.,
+                 'interface_f1': .25, 'total_s': 40., 'gpu_hours': 40/3600}]
+        performance, resources = aggregate(runs, manifest, 3.)
+        with tempfile.TemporaryDirectory() as root:
+            write_summary_csvs(performance, resources, Path(root))
+            with (Path(root)/'performance.csv').open(encoding='utf-8-sig', newline='') as handle:
+                perf_rows = list(csv.DictReader(handle))
+            with (Path(root)/'resources.csv').open(encoding='utf-8-sig', newline='') as handle:
+                resource_rows = list(csv.DictReader(handle))
+        self.assertEqual(tuple(perf_rows[0]), PERFORMANCE_COLUMNS)
+        self.assertEqual(tuple(resource_rows[0]), RESOURCE_COLUMNS)
+        self.assertEqual(len(perf_rows), 2)
+        self.assertEqual(perf_rows[0]['成功/计划'], '1/2')
+        self.assertEqual(perf_rows[0]['纳米抗体位置 RMSD Å'], '—')
+        self.assertEqual(perf_rows[1]['GDP/药物 RMSD Å'], '—')
+        self.assertIn('3.00', perf_rows[1]['纳米抗体位置 RMSD Å'])
+        self.assertEqual(resource_rows[0]['实测/计划'], '2/2')
+        self.assertEqual(resource_rows[0]['总秒'], '15.00 ± 7.07')
+        self.assertEqual(resource_rows[1]['进程费用估算 USD'], '0.033')
+
     def test_mismatched_input_hash_fails_even_for_failed_job(self):
         with tempfile.TemporaryDirectory() as root:
             root = Path(root)

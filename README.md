@@ -41,7 +41,7 @@ scontrol show node gpu-dy-g6e2xlarge-1
 
 2026-10-02 的首次 v2 尝试（Slurm 9）在官方权重下载时收到 HTTP 403，见[上游相同问题](https://github.com/bytedance/Protenix/issues/294)。内部对照若使用其他来源的权重，来源、哈希及未验证的真实性必须写入忽略 Git 的本地 sidecar 和运行指标；这不能替代官方权重验证。
 
-第二轮加入 [8BE3](https://www.rcsb.org/structure/8BE3) 的 KRAS G12V–Nanobody84 复合物。Nanobody84 是研究用纳米抗体，并非已上市抗体药；它按第二条蛋白链输入。评分先配准 KRAS，再计算纳米抗体位置 Cα RMSD 和界面残基接触 F1。此数值与小分子重原子 RMSD 不是同一指标。五种子的两张汇总表由以下命令生成，逐次数据写入运行目录的 `output/runs.csv`：
+第二轮加入 [8BE3](https://www.rcsb.org/structure/8BE3) 的 KRAS G12V–Nanobody84 复合物。Nanobody84 是研究用纳米抗体，并非已上市抗体药；它按第二条蛋白链输入。评分先配准 KRAS，再计算纳米抗体位置 Cα RMSD 和界面残基接触 F1。此数值与小分子重原子 RMSD 不是同一指标。五种子的两张汇总表由以下命令生成，分别写入运行目录的 `output/performance.csv` 和 `output/resources.csv`；逐次数据写入 `output/runs.csv`。CSV 可直接用电子表格软件打开；统计单元格显示均值 ± 样本标准差，性能指标同时显示范围，空缺指标以 `—` 标记。
 
 ```bash
 pixi run --locked python -m benchmark.repeats --usd-hour <核实的东京区g6e.2xlarge单价>
