@@ -9,7 +9,7 @@ from benchmark.prepare import build_input
 from benchmark.run import require_msa, validate_outputs
 from benchmark.report import build
 from benchmark.compare import paired
-from benchmark.repeats import aggregate, run_directory
+from benchmark.repeats import aggregate, collect, run_directory
 from benchmark.score import fit, rmsd
 from benchmark.score import score
 from Bio.PDB.MMCIF2Dict import MMCIF2Dict
@@ -267,6 +267,25 @@ class ScoringTests(unittest.TestCase):
 
 
 class RepeatTests(unittest.TestCase):
+    def test_mismatched_input_hash_fails_even_for_failed_job(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            inputs = root/'inputs'
+            outputs = root/'output'
+            inputs.mkdir()
+            run = outputs/'independent-v2'
+            run.mkdir(parents=True)
+            (inputs/'independent.json').write_text('[]')
+            manifest = {'parameters': {'seeds': [17]},
+                        'models': {'v2': {'name': 'model'}},
+                        'tasks': [{'id': 'independent', 'pdb': '2ABC', 'models': ['v2']}]}
+            (run/'metrics.json').write_text(json.dumps({
+                'task': 'independent', 'model': {'name': 'model'},
+                'parameters': {'seed': 17}, 'status': 'failed',
+                'slurm_job_id': '42', 'input_sha256': 'bad'}))
+            with self.assertRaisesRegex(ValueError, 'Input hash differs'):
+                collect(manifest, outputs, input_root=inputs)
+
     def test_aggregate_keeps_failed_seed_in_denominator(self):
         manifest = {'tasks': [{'id': 'different', 'pdb': '2ABC', 'models': ['variant']}]}
         runs = [{'task': 'different', 'model': 'variant', 'seed': 4, 'status': 'success',

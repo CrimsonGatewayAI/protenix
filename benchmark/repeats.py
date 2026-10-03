@@ -1,6 +1,7 @@
 """Aggregate independent single-seed Slurm runs into performance and resource tables."""
 import argparse
 import csv
+import hashlib
 import json
 import statistics
 from pathlib import Path
@@ -24,12 +25,15 @@ def summarize(values):
             'min': min(values), 'max': max(values), 'n': len(values)}
 
 
-def collect(manifest, root, reference_root=Path('data/references')):
+def collect(manifest, root, reference_root=Path('data/references'),
+            input_root=Path('data/inputs')):
     seeds = manifest['parameters']['seeds']
     if len(seeds) != len(set(seeds)) or not seeds:
         raise ValueError('Expected distinct nonempty seeds')
     runs = []
     for task in manifest['tasks']:
+        input_file = Path(input_root) / f"{task['id']}.json"
+        expected_input_hash = hashlib.sha256(input_file.read_bytes()).hexdigest()
         for model in task['models']:
             for seed in seeds:
                 directory = run_directory(root, task['id'], model, seed, seeds[0])
@@ -44,8 +48,12 @@ def collect(manifest, root, reference_root=Path('data/references')):
                     raise ValueError(f'Run identity mismatch: {directory}')
                 if metrics['parameters']['seed'] != seed:
                     raise ValueError(f'Seed mismatch: {directory}')
+                if (metrics['status'] == 'success' or metrics.get('input_sha256')) and \
+                        metrics.get('input_sha256') != expected_input_hash:
+                    raise ValueError(f'Input hash differs across repetitions: {directory}')
                 row.update({'status': metrics['status'], 'job_id': metrics['slurm_job_id'],
                             'error': metrics.get('error'), 'checkpoint_sha256': metrics.get('checkpoint_sha256'),
+                            'input_sha256': metrics.get('input_sha256'),
                             'checkpoint_source': metrics.get('checkpoint_source'),
                             'total_s': metrics.get('total_seconds'),
                             'preprocessing_s': metrics.get('stages_seconds', {}).get('preprocessing'),

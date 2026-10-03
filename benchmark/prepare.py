@@ -57,7 +57,7 @@ def build_input(task, cif):
         raise ValueError('Protein chains must be distinct')
     mapping = {asym: i for i, asym in enumerate(proteins, 1)}
     seqs = [{'proteinChain': {'sequence': protein_sequence(cif, asym, asym_entities),
-                             'count': 1, 'id': [f'P{i}']}}
+                             'count': 1, 'id': ['A' if len(proteins) == 1 else f'P{i}']}}
             for i, asym in enumerate(proteins, 1)]
     nonpolys = {r['entity_id']: r['comp_id'] for r in rows(cif, '_pdbx_entity_nonpoly')}
     for i, ligand in enumerate(task['ligands'], len(proteins)+1):
