@@ -279,6 +279,8 @@ class RepeatTests(unittest.TestCase):
         self.assertEqual((performance[0]['success'], performance[0]['planned']), (2, 3))
         self.assertEqual(performance[0]['ca_rmsd_A']['mean'], 2.)
         self.assertAlmostEqual(performance[0]['ca_rmsd_A']['sd'], 2**.5)
+        self.assertEqual(resources[0]['observed'], 3)
+        self.assertEqual(resources[0]['total_s']['mean'], 35.)
         self.assertAlmostEqual(resources[0]['gpu_hours_total'], 105/3600)
 
     def test_run_directory_respects_legacy_first_seed(self):

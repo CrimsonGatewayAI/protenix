@@ -86,6 +86,7 @@ def aggregate(runs, manifest, usd_hour=None):
         for model in task['models']:
             selected = [r for r in runs if r['task'] == task['id'] and r['model'] == model]
             success = [r for r in selected if r['status'] == 'success']
+            observed = [r for r in selected if r['status'] in ('success', 'failed')]
             base = {'task': task['id'], 'pdb': task['pdb'], 'model': model,
                     'success': len(success), 'planned': len(selected),
                     'type': 'nanobody' if task.get('partner_asym') else 'small_molecule'}
@@ -94,36 +95,44 @@ def aggregate(runs, manifest, usd_hour=None):
                          'partner_ca_rmsd_A', 'interface_f1'):
                 performance[name] = summarize([r.get(name) for r in success])
             resources = dict(base)
+            resources['observed'] = len(observed)
             for name in ('preprocessing_s', 'model_forward_s', 'total_s', 'cpu_percent_peak',
                          'rss_peak_bytes', 'gpu_memory_peak_mib', 'gpu_utilization_mean_percent'):
-                resources[name] = summarize([r.get(name) for r in success])
-            resources['gpu_hours_total'] = sum(r.get('gpu_hours') or 0 for r in selected
-                                               if r['status'] in ('success', 'failed'))
+                resources[name] = summarize([r.get(name) for r in observed])
+            resources['gpu_hours_total'] = sum(r.get('gpu_hours') or 0 for r in observed)
             resources['process_cost_usd_estimate'] = (
                 resources['gpu_hours_total'] * usd_hour if usd_hour is not None else None)
             groups.append((performance, resources))
     return [p for p, _ in groups], [r for _, r in groups]
 
 
-def format_stat(value, digits=2):
-    return '—' if value is None else f"{value['mean']:.{digits}f} ± {value['sd']:.{digits}f}"
+def format_stat(value, digits=2, show_range=False):
+    if value is None:
+        return '—'
+    display = f"{value['mean']:.{digits}f} ± {value['sd']:.{digits}f}"
+    if show_range:
+        display += f" ({value['min']:.{digits}f}–{value['max']:.{digits}f})"
+    return display
 
 
 def markdown(performance, resources, rate):
     lines = ['# 预测性能', '',
-             '| 任务 | 模型 | 成功/计划 | KRAS Cα RMSD Å | 结合部位 Cα RMSD Å | GDP/药物 RMSD Å | 纳米抗体位置 RMSD Å | 接触 F1 |',
-             '|---|---|---:|---:|---:|---:|---:|---:|']
+             '| 任务 | 模型 | 成功/计划 | 对齐残基数 | KRAS Cα RMSD Å | 结合部位 Cα RMSD Å | GDP/药物 RMSD Å | 纳米抗体位置 RMSD Å | 接触 F1 |',
+             '|---|---|---:|---:|---:|---:|---:|---:|---:|']
     for row in performance:
         lines.append('| ' + ' | '.join((row['task'], row['model'], f"{row['success']}/{row['planned']}",
-                   format_stat(row['ca_rmsd_A']), format_stat(row['pocket_ca_rmsd_A']),
-                   format_stat(row['focus_rmsd_A']), format_stat(row['partner_ca_rmsd_A']),
-                   format_stat(row['interface_f1']))) + ' |')
+                   format_stat(row['aligned_ca'], 0),
+                   format_stat(row['ca_rmsd_A'], show_range=True),
+                   format_stat(row['pocket_ca_rmsd_A'], show_range=True),
+                   format_stat(row['focus_rmsd_A'], show_range=True),
+                   format_stat(row['partner_ca_rmsd_A'], show_range=True),
+                   format_stat(row['interface_f1'], show_range=True))) + ' |')
     lines += ['', '# 资源消耗', '',
-              '| 任务 | 模型 | 成功/计划 | 预处理秒 | 推理秒 | 总秒 | CPU峰值% | RSS峰值 GiB | GPU显存峰值 MiB | GPU利用率% | GPU小时合计 | 进程费用估算 USD |',
+              '| 任务 | 模型 | 实测/计划 | 预处理秒 | 推理秒 | 总秒 | CPU峰值% | RSS峰值 GiB | GPU显存峰值 MiB | GPU利用率% | GPU小时合计 | 进程费用估算 USD |',
               '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|']
     for row in resources:
         rss = row['rss_peak_bytes']
-        lines.append('| ' + ' | '.join((row['task'], row['model'], f"{row['success']}/{row['planned']}",
+        lines.append('| ' + ' | '.join((row['task'], row['model'], f"{row['observed']}/{row['planned']}",
                    format_stat(row['preprocessing_s']), format_stat(row['model_forward_s']),
                    format_stat(row['total_s']), format_stat(row['cpu_percent_peak'], 0),
                    '—' if rss is None else f"{rss['max']/2**30:.2f}",
