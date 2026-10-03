@@ -55,6 +55,7 @@ def main():
     parser.add_argument('task')
     parser.add_argument('model')
     parser.add_argument('output')
+    parser.add_argument('--seed', type=int)
     parser.add_argument('--manifest', default='benchmark/tasks.json')
     parser.add_argument('--input-dir', default='data/inputs')
     args = parser.parse_args()
@@ -62,7 +63,11 @@ def main():
     task = next(t for t in manifest['tasks'] if t['id'] == args.task)
     if args.model not in task['models']:
         raise ValueError('Model not selected for this task')
-    params = manifest['parameters']
+    params = dict(manifest['parameters'])
+    if args.seed is not None:
+        if args.seed not in params.get('seeds', [params['seed']]):
+            raise ValueError('Seed is not selected in the manifest')
+        params['seed'] = args.seed
     out = Path(args.output).resolve()
     out.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()

@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 from Bio.PDB.MMCIF2Dict import MMCIF2Dict
 from Bio.SeqUtils import seq1
+from scipy.spatial import cKDTree
 
 from benchmark.prepare import rows, build_input
 
@@ -76,6 +77,16 @@ def contacts(protein, ligand, cutoff):
             if np.linalg.norm(atom['xyz']-latom['xyz']) <= cutoff}
 
 
+def residue_contacts(first, second, cutoff=5.):
+    if not first or not second:
+        return set()
+    left, right = list(first.items()), list(second.items())
+    tree = cKDTree([atom['xyz'] for _, atom in right])
+    neighbors = tree.query_ball_point([atom['xyz'] for _, atom in left], cutoff)
+    return {(left[i][0][0], right[j][0][0])
+            for i, found in enumerate(neighbors) for j in found}
+
+
 def score(task, reference, prediction):
     refc, predc = MMCIF2Dict(str(reference)), MMCIF2Dict(str(prediction))
     inp = build_input(task, refc)
@@ -103,7 +114,8 @@ def score(task, reference, prediction):
                                     'angstrom': float(np.linalg.norm(aligned[k]-ref[k]['xyz']))} for k in keys],
               'ligands': [], 'covalent_bonds': []}
     entities = {1: (ref, pred)}
-    for i, ligand in enumerate(task['ligands'], 2):
+    ligand_start = 3 if task.get('partner_asym') else 2
+    for i, ligand in enumerate(task['ligands'], ligand_start):
         lr, lp = atoms(refc, asym=ligand['asym']), atoms(predc, entity=i)
         entities[i] = (lr, lp)
         if {a['resname'] for a in lr.values()} != {ligand['ccd']}:
@@ -127,14 +139,56 @@ def score(task, reference, prediction):
                 'contacts_gained': sorted(pc-rc),
                 'unmatched_reference_protein_atoms': len(ref.keys()-pred.keys())}
         result['ligands'].append(item)
-        if ligand['ccd'] == task['focus_ccd']:
+        if ligand['ccd'] == task.get('focus_ccd'):
             pocket_residues = {r for r, _, _ in contacts(rp, lr, 5.)}
             pocket = [k for k in keys if k[0] in pocket_residues]
             if not pocket:
                 raise ValueError('No observed pocket CA atoms')
             result['pocket_label_seq_ids'] = [k[0] for k in pocket]
             result['pocket_ca_rmsd'] = rmsd([aligned[k] for k in pocket], [ref[k]['xyz'] for k in pocket])
-    if 'pocket_ca_rmsd' not in result:
+    if task.get('partner_asym'):
+        partner_ref = atoms(refc, asym=task['partner_asym'])
+        partner_pred = atoms(predc, entity=2)
+        partner_sequence = inp['sequences'][1]['proteinChain']['sequence']
+        partner_keys = sorted(k for k in partner_ref if k[1] == 'CA')
+        if not partner_keys or not set(partner_keys) <= partner_pred.keys():
+            raise ValueError('Prediction lacks observed partner CA atoms')
+        if {(i, 'CA') for i in range(1, len(partner_sequence)+1)} - partner_pred.keys():
+            raise ValueError('Prediction lacks expected partner CA atoms')
+        for (res, name), atom in partner_pred.items():
+            if name == 'CA' and (not 1 <= res <= len(partner_sequence) or
+                                 seq1(atom['resname']) != partner_sequence[res-1]):
+                raise ValueError(f'Prediction partner sequence mismatch at {res}')
+        for k in partner_keys:
+            if partner_ref[k]['resname'] != partner_pred[k]['resname']:
+                raise ValueError(f'Partner residue mismatch: {k}')
+        reference_pairs = residue_contacts(ref, partner_ref)
+        predicted_pairs = residue_contacts(pred, partner_pred)
+        interface_primary = [k for k in keys if k[0] in {p[0] for p in reference_pairs}]
+        if not interface_primary or not reference_pairs:
+            raise ValueError('No observed protein interface')
+        common_primary = {k: v for k, v in ref.items() if k in pred}
+        common_partner = {k: v for k, v in partner_ref.items() if k in partner_pred}
+        reference_pairs = residue_contacts(common_primary, common_partner)
+        predicted_pairs = residue_contacts(
+            {k: pred[k] for k in common_primary},
+            {k: partner_pred[k] for k in common_partner})
+        tp = len(reference_pairs & predicted_pairs)
+        result['pocket_ca_rmsd'] = rmsd([aligned[k] for k in interface_primary],
+                                          [ref[k]['xyz'] for k in interface_primary])
+        result['partner'] = {
+            'n_aligned_ca': len(partner_keys),
+            'ca_rmsd_after_primary_fit': rmsd(
+                [partner_pred[k]['xyz'] @ rotation + translation for k in partner_keys],
+                [partner_ref[k]['xyz'] for k in partner_keys]),
+            'interface_contacts_reference': len(reference_pairs),
+            'interface_contacts_predicted': len(predicted_pairs),
+            'interface_contacts_preserved': tp,
+            'interface_precision': tp/len(predicted_pairs) if predicted_pairs else 0.,
+            'interface_recall': tp/len(reference_pairs),
+            'interface_f1': 2*tp/(len(reference_pairs)+len(predicted_pairs))
+                            if reference_pairs or predicted_pairs else 0.}
+    elif 'pocket_ca_rmsd' not in result:
         raise ValueError('Focus ligand not selected')
     for bond in inp['covalent_bonds']:
         coords = []

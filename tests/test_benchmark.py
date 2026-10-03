@@ -9,8 +9,10 @@ from benchmark.prepare import build_input
 from benchmark.run import require_msa, validate_outputs
 from benchmark.report import build
 from benchmark.compare import paired
+from benchmark.repeats import aggregate, run_directory
 from benchmark.score import fit, rmsd
 from benchmark.score import score
+from Bio.PDB.MMCIF2Dict import MMCIF2Dict
 from Bio.PDB.mmcifio import MMCIFIO
 
 
@@ -78,6 +80,22 @@ class InputTests(unittest.TestCase):
             task['ligands'] = []
             with self.assertRaises(ValueError):
                 build_input(task, cif)
+
+    def test_two_distinct_protein_chains_are_preserved(self):
+        cif = self.metadata('ACDE')
+        cif['_struct_asym.id'].append('R')
+        cif['_struct_asym.entity_id'].append('11')
+        for key, value in {'entity_id': '11', 'type': 'polypeptide(L)',
+                           'nstd_monomer': 'no',
+                           'pdbx_seq_one_letter_code_can': 'MKWVTF'}.items():
+            cif['_entity_poly.'+key].append(value)
+        task = {'id': 'complex', 'protein_asym': 'Z', 'partner_asym': 'R',
+                'ligands': [{'asym': 'Q', 'ccd': 'ATP'}]}
+        result = build_input(task, cif)
+        self.assertEqual([x['proteinChain']['sequence'] for x in result['sequences'][:2]],
+                         ['ACDE', 'MKWVTF'])
+        self.assertEqual(result['sequences'][2]['ligand']['ligand'], 'CCD_ATP')
+        self.assertNotIn('Cartn', json.dumps(result))
 
 
 class FailureTests(unittest.TestCase):
@@ -203,6 +221,77 @@ class ScoringTests(unittest.TestCase):
         self.assertAlmostEqual(comparison[0]['delta_focus_ligand_rmsd_A'], -.8)
         self.assertEqual(comparison[1]['left_status'], 'failed')
         self.assertNotIn('delta_ca_rmsd_A', comparison[1])
+
+    def test_partner_position_is_scored_after_primary_fit(self):
+        task = {'id': 'complex', 'protein_asym': 'Z', 'partner_asym': 'R',
+                'ligands': [{'asym': 'Q', 'ccd': 'ATP'}], 'focus_partner': True}
+        with tempfile.TemporaryDirectory() as root:
+            ref, pred = Path(root)/'ref.cif', Path(root)/'pred.cif'
+            self.write_structure(ref, 9)
+            self.write_structure(pred, 9, predicted=True)
+            for path, predicted in ((ref, False), (pred, True)):
+                cif = MMCIF2Dict(str(path))
+                cif['_struct_asym.id'].append('R' if not predicted else 'B')
+                cif['_struct_asym.entity_id'].append('8' if not predicted else '2')
+                for key, value in {'entity_id': '8', 'type': 'polypeptide(L)',
+                                   'nstd_monomer': 'no',
+                                   'pdbx_seq_one_letter_code_can': 'A'*4}.items():
+                    cif['_entity_poly.'+key].append(value)
+                if predicted:
+                    cif['_atom_site.label_entity_id'] = [
+                        '3' if x == '2' else x for x in cif['_atom_site.label_entity_id']]
+                positions = list(zip(*([float(x) for x in cif['_atom_site.Cartn_'+axis]]
+                                       for axis in 'xyz')))
+                primary = [p for p, name, seq in zip(
+                    positions, cif['_atom_site.label_atom_id'], cif['_atom_site.label_seq_id'])
+                    if name == 'CA' and seq in ('1', '3', '4', '5')]
+                for i, xyz in enumerate(primary, 1):
+                    for field, value in {'group_PDB': 'ATOM', 'id': str(len(cif['_atom_site.id'])+1),
+                                         'type_symbol': 'C', 'label_atom_id': 'CA',
+                                         'label_alt_id': '.', 'label_comp_id': 'ALA',
+                                         'label_asym_id': 'B' if predicted else 'R',
+                                         'label_entity_id': '2' if predicted else '8',
+                                         'label_seq_id': str(i), 'auth_seq_id': str(i),
+                                         'occupancy': '1', 'pdbx_PDB_model_num': '1',
+                                         **{'Cartn_'+a: str(xyz[j] + (2. if predicted and a == 'x' else 0.) +
+                                                               (1. if a == 'y' else 0.))
+                                            for j, a in enumerate('xyz')}}.items():
+                        cif['_atom_site.'+field].append(value)
+                writer = MMCIFIO()
+                writer.set_dict(cif)
+                writer.save(str(path))
+            result = score(task, ref, pred)
+            self.assertEqual(result['partner']['n_aligned_ca'], 4)
+            self.assertAlmostEqual(result['partner']['ca_rmsd_after_primary_fit'], 2.)
+            self.assertGreater(result['partner']['interface_contacts_reference'], 0)
+
+
+class RepeatTests(unittest.TestCase):
+    def test_aggregate_keeps_failed_seed_in_denominator(self):
+        manifest = {'tasks': [{'id': 'different', 'pdb': '2ABC', 'models': ['variant']}]}
+        runs = [{'task': 'different', 'model': 'variant', 'seed': 4, 'status': 'success',
+                 'ca_rmsd_A': 1., 'total_s': 30., 'gpu_hours': 30/3600},
+                {'task': 'different', 'model': 'variant', 'seed': 7, 'status': 'success',
+                 'ca_rmsd_A': 3., 'total_s': 60., 'gpu_hours': 60/3600},
+                {'task': 'different', 'model': 'variant', 'seed': 9, 'status': 'failed',
+                 'total_s': 15., 'gpu_hours': 15/3600}]
+        performance, resources = aggregate(runs, manifest, 4.)
+        self.assertEqual((performance[0]['success'], performance[0]['planned']), (2, 3))
+        self.assertEqual(performance[0]['ca_rmsd_A']['mean'], 2.)
+        self.assertAlmostEqual(performance[0]['ca_rmsd_A']['sd'], 2**.5)
+        self.assertAlmostEqual(resources[0]['gpu_hours_total'], 105/3600)
+
+    def test_run_directory_respects_legacy_first_seed(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            self.assertEqual(run_directory(root, 'target', 'v1', 11, 11),
+                             root/'target-v1-seed11')
+            legacy = root/'target-v1'
+            legacy.mkdir()
+            (legacy/'metrics.json').write_text('{}')
+            self.assertEqual(run_directory(root, 'target', 'v1', 11, 11), legacy)
+            self.assertEqual(run_directory(root, 'target', 'v1', 12, 11),
+                             root/'target-v1-seed12')
 
 
 if __name__ == '__main__':

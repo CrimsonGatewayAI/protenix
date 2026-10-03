@@ -16,13 +16,14 @@ pixi install --locked
 
 ## KRAS 第一轮评测
 
-`benchmark/tasks.json` 固定六类实验结构、九个模型任务和推理参数。输入生成器从所选 mmCIF 的实体序列、CCD 配体及显式共价连接生成 `data/inputs/*.json`；参考原子坐标只由独立评分器读取。`data/inputs/audit.json` 保存来源链接、SHA-256、发布日期、构建体完整序列及配体字典。任务限于一个标准氨基酸蛋白链和选定的单 CCD 配体/离子；无法表达的输入会报错。
+`benchmark/tasks.json` 固定七类实验结构、十一组模型任务、种子 101–105 和推理参数。输入生成器从所选 mmCIF 的实体序列、CCD 配体及显式共价连接生成 `data/inputs/*.json`；参考原子坐标只由独立评分器读取。`data/inputs/audit.json` 保存来源链接、SHA-256、发布日期、构建体完整序列及配体字典。任务支持一条 KRAS 蛋白链、可选的一条结合蛋白链和选定的单 CCD 配体/离子；无法表达的输入会报错。
 
 ```bash
 pixi run --locked python -m benchmark.prepare
 pixi run --locked python -m unittest discover -s tests -v
 mkdir -p logs
 sbatch scripts/benchmark.sbatch wt_gdp v2 output/wt_gdp-v2
+sbatch scripts/benchmark.sbatch wt_gdp v2 output/wt_gdp-v2-seed102 102
 ```
 
 先核对首个任务的 `metrics.json` 为 `success`、`ERR/` 为空、MSA 和 CIF 均存在，再逐项提交清单里其余任务，模型键为 `v2` 或 `v1`。请勿并发执行，以便比较单张 L40S 的算力。作业由 Slurm 分配 AWS GPU；不在登录节点运行推理。上游 CLI 可能捕获异常并以退出码 0 返回，因此 `benchmark.run` 还要求真实的 MSA 命中、完整结构数、有限坐标和无错误文件，失败时以非零状态退出。GPU 利用率/显存逐秒写入 `logs/gpu-<jobid>.csv`，GNU time 写入 `logs/time-<jobid>.txt`，进程树 RSS 与 CPU 使用率每秒写入运行目录 `cpu.csv`；逐秒采样峰值只作为观测值。`metrics.json` 区分预处理、前向传播、总时间、首次资源下载和 CUDA 扩展构建/加载；首次编译对前向传播也可能另有开销。
@@ -37,7 +38,15 @@ scontrol show node gpu-dy-g6e2xlarge-1
 
 6OIM 和 6UT0 使用 G12C/C51S/C80L/C118S 构建体；7RPZ 的完整序列同样含 C51S/C80L/C118S，尽管其结构注释只列 G12D。输入匹配每个沉积序列，包括存在的 N 端残基/标签。发布日期在清单审计中记录；模型的训练数据截止日期均为 2021-09-30。截止日期之后发表的结构也不是独立盲测；本评测属于回顾性对照。
 
-2026-10-02 的首次 v2 尝试（Slurm 9）在官方权重下载时收到 HTTP 403，见[上游相同问题](https://github.com/bytedance/Protenix/issues/294)。结果表明确标记其余 v2 任务受该权重阻断；有合法的官方 v2 检查点可用后，放在 `data/protenix/checkpoint/protenix-v2.pt` 并重新提交 v2 作业。当前完成的三个 v1 作业与 v2 没有可计算的模型间对照差异。
+2026-10-02 的首次 v2 尝试（Slurm 9）在官方权重下载时收到 HTTP 403，见[上游相同问题](https://github.com/bytedance/Protenix/issues/294)。内部对照若使用其他来源的权重，来源、哈希及未验证的真实性必须写入忽略 Git 的本地 sidecar 和运行指标；这不能替代官方权重验证。
+
+第二轮加入 [8BE3](https://www.rcsb.org/structure/8BE3) 的 KRAS G12V–Nanobody84 复合物。Nanobody84 是研究用纳米抗体，并非已上市抗体药；它按第二条蛋白链输入。评分先配准 KRAS，再计算纳米抗体位置 Cα RMSD 和界面残基接触 F1。此数值与小分子重原子 RMSD 不是同一指标。五种子的两张汇总表由以下命令生成，逐次数据写入 `output/runs.csv`：
+
+```bash
+pixi run --locked python -m benchmark.repeats --usd-hour <核实的东京区g6e.2xlarge单价>
+```
+
+费用为作业占用时长乘公开 Linux 按需单价的估算；节点启动、空闲和关机时间另计，不应称为实际账单。单价来源和日期记录在本地 `output/price-source.json`。
 
 所有 GPU 作业完成后，确认节点变为 `POWERED_DOWN` 且 `aws ec2 describe-instances --region ap-northeast-1 --instance-ids <GPU instance ID>` 报告 `terminated`。当前集群未启用 Slurm accounting，报告明确标记这一限制；GPU 小时以运行进程占用的 GPU 时间估计，节点启动与关机时间另见 EC2 生命周期。
 

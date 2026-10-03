@@ -35,22 +35,34 @@ def fetch(url, path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def build_input(task, cif):
-    asym_entities = {r['id']: r['entity_id'] for r in rows(cif, '_struct_asym')}
+def protein_sequence(cif, asym, asym_entities):
+    if asym not in asym_entities:
+        raise ValueError(f'Unknown protein asym {asym}')
     polymer = [r for r in rows(cif, '_entity_poly')
-               if r['entity_id'] == asym_entities[task['protein_asym']]]
+               if r['entity_id'] == asym_entities[asym]]
     if len(polymer) != 1 or polymer[0]['type'] != 'polypeptide(L)':
-        raise ValueError('Expected one selected L-polypeptide')
+        raise ValueError(f'Expected one selected L-polypeptide: {asym}')
     poly = polymer[0]
     sequence = ''.join(poly['pdbx_seq_one_letter_code_can'].split())
     if poly['nstd_monomer'] != 'no' or set(sequence) - set('ACDEFGHIKLMNPQRSTVWY'):
-        raise ValueError('Modified/unknown protein monomers require explicit input support')
-    mapping = {task['protein_asym']: 1}
-    seqs = [{'proteinChain': {'sequence': sequence, 'count': 1, 'id': ['A']}}]
+        raise ValueError(f'Modified/unknown protein monomers require explicit input support: {asym}')
+    return sequence
+
+
+def build_input(task, cif):
+    asym_entities = {r['id']: r['entity_id'] for r in rows(cif, '_struct_asym')}
+    primary = task['protein_asym']
+    proteins = [primary] + ([task['partner_asym']] if task.get('partner_asym') else [])
+    if len(proteins) != len(set(proteins)):
+        raise ValueError('Protein chains must be distinct')
+    mapping = {asym: i for i, asym in enumerate(proteins, 1)}
+    seqs = [{'proteinChain': {'sequence': protein_sequence(cif, asym, asym_entities),
+                             'count': 1, 'id': [f'P{i}']}}
+            for i, asym in enumerate(proteins, 1)]
     nonpolys = {r['entity_id']: r['comp_id'] for r in rows(cif, '_pdbx_entity_nonpoly')}
-    for i, ligand in enumerate(task['ligands'], 2):
+    for i, ligand in enumerate(task['ligands'], len(proteins)+1):
         asym, ccd = ligand['asym'], ligand['ccd']
-        if asym in mapping or nonpolys[asym_entities[asym]] != ccd:
+        if asym in mapping or asym not in asym_entities or nonpolys.get(asym_entities[asym]) != ccd:
             raise ValueError(f'Duplicate or mismatched ligand {ligand}')
         mapping[asym] = i
         seqs.append({'ligand': {'ligand': f'CCD_{ccd}', 'count': 1, 'id': [f'L{i}']}})
@@ -104,6 +116,8 @@ def prepare(manifest, destination, reference_root='data/references', ccd_root='d
         (destination / f"{task['id']}.json").write_text(json.dumps([item], indent=2) + '\n')
         audit.append({**task, 'reference_url': url, 'reference_sha256': digest,
                       'release_date': release, 'sequence': item['sequences'][0]['proteinChain']['sequence'],
+                      'protein_sequences': [x['proteinChain']['sequence'] for x in item['sequences']
+                                            if 'proteinChain' in x],
                       'covalent_bonds': item['covalent_bonds'], 'chemistry': chemistry,
                       'split': {m: 'post_cutoff' if release > manifest['models'][m]['training_cutoff']
                                 else 'retrospective' for m in task['models']}})
