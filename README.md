@@ -78,7 +78,45 @@ pixi run --locked python -m benchmark.repeats --usd-hour <核实的东京区g6e.
 
 ## 单次预测
 
-准备符合[官方输入格式](https://github.com/bytedance/Protenix/blob/main/docs/infer_json_format.md)的 JSON，然后提交：
+对于没有已知三维结构的新蛋白–配体组合，至少需要蛋白的氨基酸序列，以及配体的
+SMILES、CCD 编号或带三维构象的分子文件。参照
+[`examples/protein_ligand.template.json`](examples/protein_ligand.template.json)
+填写自己的输入。模板中的 `REPLACE_WITH_...` 必须替换为真实值，不能直接提交。
+[`examples/kras_gdp.json`](examples/kras_gdp.json) 是可提交的真实格式示例：
+KRAS 催化结构域、GDP 和 Mg；它只演示输入结构，不代表其他蛋白或配体会结合。
+JSON 顶层必须是数组；`sequences` 中每个实体分别描述，数量由 `count` 指定。
+配体可写作 SMILES、`CCD_GDP` 等 CCD 编号，或 `FILE_/shared/.../ligand.sdf`；
+文件输入需包含三维构象，建议使用计算节点可读的绝对路径。已知的辅因子、离子和
+其他参与结合的组分也应按实际体系加入。共价配体还必须按
+[官方输入格式](https://github.com/bytedance/Protenix/blob/main/docs/infer_json_format.md)
+指定 `covalent_bonds` 的实体编号、残基位置和连接原子；不要把非共价结合写成共价键。
+
+共享安装可从任意目录提交，输入文件建议使用绝对路径：
+
+```bash
+/shared/software/bin/protenix-predict "$HOME/my_protein_ligand.json"
+# 可先用现成示例检查提交流程；这会启动真实 GPU 预测并产生费用：
+/shared/software/bin/protenix-predict /shared/pipelines/protenix/examples/kras_gdp.json
+```
+
+默认使用 `protenix_base_default_v1.0.0`。命令打印 Slurm 作业号；该用户的日志写入
+`/shared/pipelines/protenix-artifacts/runs/users/<用户名>/kras-5-seeds/logs/predict-<作业号>.out`，
+结构与置信度文件写入同级 `output/predict-<作业号>/`。可将输出目录作为第二个参数，
+模型名称作为第三个参数；自定义输出目录也须是计算节点可写的绝对路径。查看作业、
+日志和输出，例如：
+
+```bash
+squeue -u "$USER"
+tail -f "/shared/pipelines/protenix-artifacts/runs/users/$USER/kras-5-seeds/logs/predict-<作业号>.out"
+find "/shared/pipelines/protenix-artifacts/runs/users/$USER/kras-5-seeds/output/predict-<作业号>" -type f
+```
+
+必须确认日志没有错误，并存在真实的预测 CIF 与置信度 JSON；通用单次预测入口
+尚未对任意新蛋白–配体组合做端到端验证，Slurm 完成状态本身不足以证明预测有效。
+没有实验参考结构时可以看模型置信度，但不能计算与实验的 RMSD；置信度也不等于
+结合亲和力或实验验证。GPU 节点用完后确认已关闭。
+
+原仓库的本地入口仍可使用，准备符合官方格式的 JSON 后提交：
 
 ```bash
 scripts/submit_predict.sh input.json
