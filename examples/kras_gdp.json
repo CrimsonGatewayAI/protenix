@@ -1,0 +1,29 @@
+[
+  {
+    "name": "kras_gdp_example",
+    "sequences": [
+      {
+        "proteinChain": {
+          "sequence": "GMTEYKLVVVGAGGVGKSALTIQLIQNHFVDEYDPTIEDSYRKQVVIDGETCLLDILDTAGQEEYSAMRDQYMRTGEGFLCVFAINNTKSFEDIHHYREQIKRVKDSEDVPMVLVGNKCDLPSRTVDTKQAQDLARSYGIPFIETSAKTRQGVDDAFYTLVREIRKHKEK",
+          "count": 1,
+          "id": ["A"]
+        }
+      },
+      {
+        "ligand": {
+          "ligand": "CCD_GDP",
+          "count": 1,
+          "id": ["B"]
+        }
+      },
+      {
+        "ligand": {
+          "ligand": "CCD_MG",
+          "count": 1,
+          "id": ["C"]
+        }
+      }
+    ],
+    "covalent_bonds": []
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "name": "my_protein_ligand",
+    "sequences": [
+      {
+        "proteinChain": {
+          "sequence": "REPLACE_WITH_AMINO_ACID_SEQUENCE",
+          "count": 1,
+          "id": ["A"]
+        }
+      },
+      {
+        "ligand": {
+          "ligand": "REPLACE_WITH_SMILES_OR_CCD_CODE",
+          "count": 1,
+          "id": ["B"]
+        }
+      }
+    ],
+    "covalent_bonds": []
+  }
+]

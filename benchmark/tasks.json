@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "models": {
+    "v2": {"name": "protenix-v2", "training_cutoff": "2021-09-30"},
+    "v1": {"name": "protenix_base_default_v1.0.0", "training_cutoff": "2021-09-30"}
+  },
+  "parameters": {"seeds": [101, 102, 103, 104, 105], "seed": 101, "cycles": 10, "steps": 200, "samples": 1, "dtype": "bf16", "use_msa": true, "use_template": false},
+  "tasks": [
+    {"id": "wt_gdp", "pdb": "6MBT", "protein_asym": "A", "ligands": [{"asym": "C", "ccd": "GDP"}, {"asym": "D", "ccd": "MG"}], "focus_ccd": "GDP", "models": ["v2", "v1"], "notes": "WT catalytic domain; N-terminal G; GDP/Mg; crystal copy A."},
+    {"id": "g12c_gdp", "pdb": "4L8G", "protein_asym": "A", "ligands": [{"asym": "B", "ccd": "GDP"}, {"asym": "C", "ccd": "MG"}], "focus_ccd": "GDP", "models": ["v2"], "notes": "G12C; N-terminal G; GDP/Mg. Crystallization sodium and water excluded."},
+    {"id": "g12d_gdp", "pdb": "7F0W", "protein_asym": "A", "ligands": [{"asym": "B", "ccd": "GDP"}, {"asym": "C", "ccd": "MG"}], "focus_ccd": "GDP", "models": ["v2"], "notes": "G12D; deposited N-terminus STEYK; GDP/Mg; switch 1 open conformation, so deviations can reflect conformational-state differences."},
+    {"id": "g12c_sotorasib", "pdb": "6OIM", "protein_asym": "A", "ligands": [{"asym": "C", "ccd": "GDP"}, {"asym": "B", "ccd": "MG"}, {"asym": "D", "ccd": "MOV"}], "focus_ccd": "MOV", "models": ["v2", "v1"], "notes": "G12C/C51S/C80L/C118S; complete deposited affinity tag retained; MOV is bound AMG510; Cys12 is input position 26."},
+    {"id": "g12c_adagrasib", "pdb": "6UT0", "protein_asym": "A", "ligands": [{"asym": "E", "ccd": "GDP"}, {"asym": "F", "ccd": "MG"}, {"asym": "G", "ccd": "M1X"}], "focus_ccd": "M1X", "models": ["v2"], "notes": "G12C/C51S/C80L/C118S; N-terminal G; deposited bound MRTX849 component M1X; Cys12 is input position 13."},
+    {"id": "g12d_mrtx1133", "pdb": "7RPZ", "protein_asym": "A", "ligands": [{"asym": "B", "ccd": "GDP"}, {"asym": "D", "ccd": "MG"}, {"asym": "C", "ccd": "6IC"}], "focus_ccd": "6IC", "models": ["v2", "v1"], "notes": "Research compound MRTX1133; G12D/C51S/C80L/C118S from deposited sequence (mutation annotation incomplete); N-terminal G; noncovalent."},
+    {"id": "g12v_nanobody84", "pdb": "8BE3", "protein_asym": "B", "partner_asym": "A", "ligands": [{"asym": "F", "ccd": "GDP"}, {"asym": "E", "ccd": "MG"}], "focus_partner": true, "models": ["v2", "v1"], "notes": "KRAS G12V and research nanobody Nanobody84, one author-assigned heterodimer; not an approved antibody drug."}
+  ]
+}
