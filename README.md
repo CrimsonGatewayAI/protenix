@@ -16,6 +16,27 @@ pixi install --locked
 
 安装依据 `pixi.lock`。当前节点只检查安装，不运行结构预测。
 
+## 集群共享副本
+
+本集群的共享代码位于 `/shared/pipelines/protenix/`，同级的
+`/shared/pipelines/protenix-artifacts/` 保存模型权重、Protenix 公共数据、参考结构、
+CCD、已生成输入与历史结果。共享代码中的 `.pixi/` 从 `pixi.lock` 在该位置重新安装，
+不能从其他路径直接复制虚拟环境。新任务由以下入口从任意工作目录提交：
+
+```bash
+/shared/software/bin/protenix-benchmark --check
+/shared/software/bin/protenix-benchmark wt_gdp v1 101
+/shared/software/bin/protenix-report
+# 自备 Protenix JSON 的单次预测：
+/shared/software/bin/protenix-predict /shared/home/USER/input.json
+```
+
+入口自动设置共享 Pixi 和 Slurm 路径，并将每位用户的新运行结果与 CUDA 扩展缓存
+写入 `/shared/pipelines/protenix-artifacts/runs/users/<用户名>/kras-5-seeds/`。
+旧运行记录中的绝对路径可能仍指向原 `/home/ubuntu/work/`；它们只作历史记录，
+新任务读取共享目录下的输入和参考文件。共享的 v2 权重来源标注在
+`data/protenix/checkpoint/protenix-v2.source.json` 中，不能将其视为已核实的官方权重。
+
 ## KRAS 第一轮评测
 
 `benchmark/tasks.json` 固定七类实验结构、十一组模型任务、种子 101–105 和推理参数。输入生成器从所选 mmCIF 的实体序列、CCD 配体及显式共价连接生成产物目录下的 `data/inputs/*.json`；参考原子坐标只由独立评分器读取。`data/inputs/audit.json` 保存来源链接、SHA-256、发布日期、构建体完整序列及配体字典。任务支持一条 KRAS 蛋白链、可选的一条结合蛋白链和选定的单 CCD 配体/离子；无法表达的输入会报错。
