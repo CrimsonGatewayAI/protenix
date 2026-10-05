@@ -13,7 +13,8 @@ from benchmark.run import require_msa, validate_outputs
 from benchmark.report import build
 from benchmark.compare import paired
 from benchmark.repeats import (PERFORMANCE_COLUMNS, RESOURCE_COLUMNS, aggregate,
-                               collect, run_directory, write_summary_csvs)
+                               collect, read_confidence, run_directory,
+                               write_confidence_csv, write_summary_csvs)
 from benchmark.paths import artifact_root, data_root, logs_root, output_root, run_root
 from benchmark.score import fit, rmsd
 from benchmark.score import score
@@ -272,6 +273,39 @@ class ScoringTests(unittest.TestCase):
 
 
 class RepeatTests(unittest.TestCase):
+    def test_confidence_is_read_for_the_selected_sample_and_fails_visibly(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            for name, sample, plddt in (('unrelated_name', 0, 73.), ('other_target', 7, 96.)):
+                structure = Path('predictions') / f'{name}_sample_{sample}.cif'
+                path = root / structure.parent / f'{name}_summary_confidence_sample_{sample}.json'
+                path.parent.mkdir(exist_ok=True)
+                with self.assertRaises(FileNotFoundError):
+                    read_confidence(root, structure)
+                payload = {'plddt': plddt, 'ptm': .8, 'iptm': .6, 'gpde': 1.2,
+                           'ranking_score': .64}
+                path.write_text(json.dumps(payload))
+                self.assertEqual(read_confidence(root, structure)['confidence_plddt'], plddt)
+                payload['ptm'] = 'missing'
+                path.write_text(json.dumps(payload))
+                with self.assertRaisesRegex(ValueError, 'Invalid confidence metric ptm'):
+                    read_confidence(root, structure)
+
+    def test_confidence_summary_exposes_failed_and_unrun_samples(self):
+        manifest = {'tasks': [{'id': 'independent', 'pdb': '9XYZ', 'models': ['custom']}]}
+        runs = [{'task': 'independent', 'model': 'custom', 'status': status}
+                for status in ('success', 'success', 'failed', 'not_run')]
+        for row, plddt in zip(runs[:2], (70., 90.)):
+            row.update({'confidence_plddt': plddt, 'confidence_ptm': .9,
+                        'confidence_iptm': .7, 'confidence_gpde': 1.,
+                        'confidence_ranking_score': .74})
+        with tempfile.TemporaryDirectory() as root:
+            write_confidence_csv(runs, manifest, Path(root))
+            with (Path(root)/'confidence.csv').open(encoding='utf-8-sig', newline='') as handle:
+                row = next(csv.DictReader(handle))
+        self.assertEqual(row['成功/计划'], '2/4')
+        self.assertEqual(row['pLDDT'], '80.00 ± 14.14')
+
     def test_summary_csvs_keep_all_columns_and_missing_metrics(self):
         manifest = {'tasks': [{'id': 'ligand', 'pdb': '1ABC', 'models': ['v2']},
                               {'id': 'partner', 'pdb': '2XYZ', 'models': ['v1'],
@@ -295,12 +329,12 @@ class RepeatTests(unittest.TestCase):
         self.assertEqual(tuple(resource_rows[0]), RESOURCE_COLUMNS)
         self.assertEqual(len(perf_rows), 2)
         self.assertEqual(perf_rows[0]['成功/计划'], '1/2')
-        self.assertEqual(perf_rows[0]['纳米抗体位置 RMSD Å'], '—')
-        self.assertEqual(perf_rows[1]['GDP/药物 RMSD Å'], '—')
-        self.assertIn('3.00', perf_rows[1]['纳米抗体位置 RMSD Å'])
+        self.assertEqual(perf_rows[0]['ID'], '1ABC')
+        self.assertEqual(perf_rows[0]['配体/抗体 RMSD Å'], '2.00 ± 0.00')
+        self.assertEqual(perf_rows[1]['配体/抗体 RMSD Å'], '3.00 ± 0.00')
         self.assertEqual(resource_rows[0]['实测/计划'], '2/2')
         self.assertEqual(resource_rows[0]['总秒'], '15.00 ± 7.07')
-        self.assertEqual(resource_rows[1]['进程费用估算 USD'], '0.033')
+        self.assertEqual(resource_rows[1]['费用 USD'], '0.033')
 
     def test_mismatched_input_hash_fails_even_for_failed_job(self):
         with tempfile.TemporaryDirectory() as root:

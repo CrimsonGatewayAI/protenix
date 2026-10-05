@@ -41,13 +41,17 @@ scontrol show node gpu-dy-g6e2xlarge-1
 
 2026-10-02 的首次 v2 尝试（Slurm 9）在官方权重下载时收到 HTTP 403，见[上游相同问题](https://github.com/bytedance/Protenix/issues/294)。内部对照若使用其他来源的权重，来源、哈希及未验证的真实性必须写入忽略 Git 的本地 sidecar 和运行指标；这不能替代官方权重验证。
 
-第二轮加入 [8BE3](https://www.rcsb.org/structure/8BE3) 的 KRAS G12V–Nanobody84 复合物。Nanobody84 是研究用纳米抗体，并非已上市抗体药；它按第二条蛋白链输入。评分先配准 KRAS，再计算纳米抗体位置 Cα RMSD 和界面残基接触 F1。此数值与小分子重原子 RMSD 不是同一指标。五种子的两张汇总表由以下命令生成，分别写入运行目录的 `output/performance.csv` 和 `output/resources.csv`；逐次数据写入 `output/runs.csv`。CSV 可直接用电子表格软件打开；统计单元格显示均值 ± 样本标准差，性能指标同时显示范围，空缺指标以 `—` 标记。
+第二轮加入 [8BE3](https://www.rcsb.org/structure/8BE3) 的 KRAS G12V–Nanobody84 复合物。Nanobody84 是研究用纳米抗体，并非已上市抗体药；它按第二条蛋白链输入。评分先配准 KRAS，再计算纳米抗体位置 Cα RMSD 和界面残基接触 F1。此数值与小分子重原子 RMSD 不是同一指标。五种子的两张精简汇总表由以下命令生成，分别写入运行目录的 `output/performance.csv` 和 `output/resources.csv`；逐次数据写入 `output/runs.csv`，完整统计保存在 `output/performance.json` 和 `output/resources.json`。CSV 可直接用电子表格软件打开；统计单元格显示均值 ± 样本标准差。性能表的“配体/抗体”列按任务类型分别表示小分子重原子 RMSD 或纳米抗体位置 Cα RMSD，两者不可直接比较。
 
 ```bash
 pixi run --locked python -m benchmark.repeats --usd-hour <核实的东京区g6e.2xlarge单价>
 ```
 
 费用为作业占用时长乘公开 Linux 按需单价的估算；节点启动、空闲和关机时间另计，不应称为实际账单。单价来源和日期记录在运行目录的 `output/price-source.json`。
+
+同一命令还生成 `output/confidence.csv`，汇总成功预测的原生 pLDDT、pTM、ipTM、gPDE 和 ranking score；失败与未运行样本仍保留在分母中。它们是模型自评置信度，不是相对实验结构测得的准确率。完整原始值保存在各预测的 `*_summary_confidence_sample_*.json` 和 `output/runs.csv`。
+
+实验参考均从 RCSB PDB 下载原始 mmCIF，来源 URL、SHA-256、发布日期、所选链和输入序列记录在 `data/inputs/audit.json`。7F0W 的沉积标题明确标注 switch 1 开放构象；其较大 RMSD 必须结合构象状态解释。额外与 5US4 的事后比较使用共同的 168 残基核心序列，排除不同的 N 端构建体部分，并分别报告两条实验 KRAS 链；这不替代原 7F0W 评分，也不代表重新预测了 5US4 构建体。
 
 所有 GPU 作业完成后，确认节点变为 `POWERED_DOWN` 且 `aws ec2 describe-instances --region ap-northeast-1 --instance-ids <GPU instance ID>` 报告 `terminated`。当前集群未启用 Slurm accounting，报告明确标记这一限制；GPU 小时以运行进程占用的 GPU 时间估计，节点启动与关机时间另见 EC2 生命周期。
 

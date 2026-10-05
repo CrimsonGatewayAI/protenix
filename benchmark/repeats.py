@@ -3,12 +3,31 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import statistics
 from pathlib import Path
 
 from benchmark.report import gpu_telemetry
 from benchmark.score import score
 from benchmark.paths import data_root, output_root, logs_root
+
+
+CONFIDENCE_METRICS = ('plddt', 'ptm', 'iptm', 'gpde', 'ranking_score')
+
+
+def read_confidence(directory, structure):
+    """Read Protenix's self-estimated confidence for the scored sample."""
+    structure = Path(structure)
+    name, sample = structure.stem.rsplit('_sample_', 1)
+    path = directory / structure.parent / f'{name}_summary_confidence_sample_{sample}.json'
+    confidence = json.loads(path.read_text())
+    result = {}
+    for metric in CONFIDENCE_METRICS:
+        value = confidence[metric]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ValueError(f'Invalid confidence metric {metric}: {path}')
+        result[f'confidence_{metric}'] = value
+    return result
 
 
 def run_directory(root, task, model, seed, first_seed):
@@ -72,6 +91,7 @@ def collect(manifest, root, reference_root=None, input_root=None):
                     structures = metrics['structures']
                     if len(structures) != 1:
                         raise ValueError(f'Expected one structure: {directory}')
+                    row.update(read_confidence(directory, structures[0]))
                     result = score(task, reference_root / f"{task['pdb']}.cif", directory / structures[0])
                     row['aligned_ca'] = result['n_aligned_ca']
                     row['ca_rmsd_A'] = result['ca_rmsd']
@@ -125,46 +145,53 @@ def format_stat(value, digits=2, show_range=False):
     return display
 
 
-PERFORMANCE_COLUMNS = ('任务', '实验结构', '模型', '成功/计划', '对齐残基数',
-                       'KRAS Cα RMSD Å', '结合部位 Cα RMSD Å', 'GDP/药物 RMSD Å',
-                       '纳米抗体位置 RMSD Å', '接触 F1')
-RESOURCE_COLUMNS = ('任务', '实验结构', '模型', '实测/计划', '预处理秒', '推理秒', '总秒',
-                    'CPU峰值%', 'RSS峰值 GiB', 'GPU显存峰值 MiB', 'GPU利用率%',
-                    'GPU小时合计', '进程费用估算 USD')
+PERFORMANCE_COLUMNS = ('ID', '模型', '成功/计划', 'KRAS RMSD Å', '口袋 RMSD Å',
+                       '配体/抗体 RMSD Å', '接触 F1')
+RESOURCE_COLUMNS = ('ID', '模型', '实测/计划', '总秒', '推理秒', '显存峰值 MiB',
+                    'GPU小时', '费用 USD')
 
 
 def write_summary_csvs(performance, resources, root):
-    """Write two complete, human-readable UTF-8 CSV summary tables."""
+    """Write compact human-readable summaries; full metrics remain in JSON and runs.csv."""
     with (root / 'performance.csv').open('w', newline='', encoding='utf-8-sig') as handle:
         writer = csv.writer(handle)
         writer.writerow(PERFORMANCE_COLUMNS)
         for row in performance:
-            writer.writerow((row['task'], row['pdb'], row['model'],
+            writer.writerow((row['pdb'], row['model'],
                              f"{row['success']}/{row['planned']}",
-                             format_stat(row['aligned_ca'], 0),
-                             format_stat(row['ca_rmsd_A'], show_range=True),
-                             format_stat(row['pocket_ca_rmsd_A'], show_range=True),
-                             format_stat(row['focus_rmsd_A'], show_range=True),
-                             format_stat(row['partner_ca_rmsd_A'], show_range=True),
-                             format_stat(row['interface_f1'], show_range=True)))
+                             format_stat(row['ca_rmsd_A']),
+                             format_stat(row['pocket_ca_rmsd_A']),
+                             format_stat(row['partner_ca_rmsd_A'] if row['type'] == 'nanobody'
+                                         else row['focus_rmsd_A']),
+                             format_stat(row['interface_f1'])))
     with (root / 'resources.csv').open('w', newline='', encoding='utf-8-sig') as handle:
         writer = csv.writer(handle)
         writer.writerow(RESOURCE_COLUMNS)
         for row in resources:
-            rss = row['rss_peak_bytes']
             gpu_memory = row['gpu_memory_peak_mib']
             cost = row['process_cost_usd_estimate']
-            writer.writerow((row['task'], row['pdb'], row['model'],
+            writer.writerow((row['pdb'], row['model'],
                              f"{row['observed']}/{row['planned']}",
-                             format_stat(row['preprocessing_s']),
-                             format_stat(row['model_forward_s']),
                              format_stat(row['total_s']),
-                             format_stat(row['cpu_percent_peak'], 0),
-                             '—' if rss is None else f"{rss['max']/2**30:.2f}",
+                             format_stat(row['model_forward_s']),
                              '—' if gpu_memory is None else f"{gpu_memory['max']:.0f}",
-                             format_stat(row['gpu_utilization_mean_percent'], 0),
                              f"{row['gpu_hours_total']:.3f}",
                              '—' if cost is None else f'{cost:.3f}'))
+
+
+def write_confidence_csv(runs, manifest, root):
+    """Supplemental self-confidence table; these are not reference accuracy scores."""
+    with (root / 'confidence.csv').open('w', newline='', encoding='utf-8-sig') as handle:
+        writer = csv.writer(handle)
+        writer.writerow(('ID', '模型', '成功/计划', 'pLDDT', 'pTM', 'ipTM', 'gPDE Å', 'ranking score'))
+        for task in manifest['tasks']:
+            for model in task['models']:
+                selected = [row for row in runs if row['task'] == task['id'] and row['model'] == model]
+                success = [row for row in selected if row['status'] == 'success']
+                writer.writerow((task['pdb'], model, f'{len(success)}/{len(selected)}', *(
+                    format_stat(summarize([row[f'confidence_{metric}'] for row in success]),
+                                2 if metric == 'plddt' else 3)
+                    for metric in CONFIDENCE_METRICS)))
 
 
 if __name__ == '__main__':
@@ -183,6 +210,7 @@ if __name__ == '__main__':
     (root / 'performance.json').write_text(json.dumps(performance, indent=2) + '\n')
     (root / 'resources.json').write_text(json.dumps(resources, indent=2) + '\n')
     write_summary_csvs(performance, resources, root)
+    write_confidence_csv(runs, manifest, root)
     with (root / 'runs.csv').open('w', newline='') as handle:
         fields = sorted({key for row in runs for key in row} - {'checkpoint_source'})
         writer = csv.DictWriter(handle, fieldnames=fields)
