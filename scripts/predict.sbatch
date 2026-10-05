@@ -13,7 +13,8 @@ export PATH="${HOME}/.pixi/bin:${PATH}"
 export PROTENIX_ARTIFACTS_DIR="${PROTENIX_ARTIFACTS_DIR:-$(dirname "${SLURM_SUBMIT_DIR}")/protenix-artifacts}"
 export PROTENIX_RUN_DIR="${PROTENIX_RUN_DIR:-${PROTENIX_ARTIFACTS_DIR}/runs/kras-5-seeds}"
 export PROTENIX_ROOT_DIR="${PROTENIX_ARTIFACTS_DIR}/data/protenix"
-export TORCH_EXTENSIONS_DIR="${PROTENIX_ARTIFACTS_DIR}/data/torch_extensions"
+export TORCH_EXTENSIONS_DIR="${TORCH_EXTENSIONS_DIR:-${PROTENIX_RUN_DIR}/torch_extensions}"
+mkdir -p "${TORCH_EXTENSIONS_DIR}"
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: sbatch scripts/predict.sbatch INPUT_JSON [OUTPUT_DIR] [MODEL_NAME]" >&2
