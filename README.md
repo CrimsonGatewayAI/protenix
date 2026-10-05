@@ -41,7 +41,7 @@ scontrol show node gpu-dy-g6e2xlarge-1
 
 2026-10-02 的首次 v2 尝试（Slurm 9）在官方权重下载时收到 HTTP 403，见[上游相同问题](https://github.com/bytedance/Protenix/issues/294)。内部对照若使用其他来源的权重，来源、哈希及未验证的真实性必须写入忽略 Git 的本地 sidecar 和运行指标；这不能替代官方权重验证。
 
-第二轮加入 [8BE3](https://www.rcsb.org/structure/8BE3) 的 KRAS G12V–Nanobody84 复合物。Nanobody84 是研究用纳米抗体，并非已上市抗体药；它按第二条蛋白链输入。评分先配准 KRAS，再计算纳米抗体位置 Cα RMSD 和界面残基接触 F1。此数值与小分子重原子 RMSD 不是同一指标。五种子的两张精简汇总表由以下命令生成，分别写入运行目录的 `output/performance.csv` 和 `output/resources.csv`；逐次数据写入 `output/runs.csv`，完整统计保存在 `output/performance.json` 和 `output/resources.json`。CSV 可直接用电子表格软件打开；统计单元格显示均值 ± 样本标准差。性能表的“配体/抗体”列按任务类型分别表示小分子重原子 RMSD 或纳米抗体位置 Cα RMSD，两者不可直接比较。
+第二轮加入 [8BE3](https://www.rcsb.org/structure/8BE3) 的 KRAS G12V–Nanobody84 复合物。Nanobody84 是研究用纳米抗体，并非已上市抗体药；它按第二条蛋白链输入。评分先配准 KRAS，再计算纳米抗体位置 Cα RMSD 和界面残基接触 F1。此数值与小分子重原子 RMSD 不是同一指标。五种子的两张精简汇总表由以下命令生成，分别写入运行目录的 `output/performance.csv` 和 `output/resources.csv`；逐次数据写入 `output/runs.csv`，完整统计保存在 `output/performance.json` 和 `output/resources.json`。各汇总 CSV 同时包含实验结构 `ID` 和任务 `Task`（如 `wt_gdp`、`g12c_sotorasib`）。CSV 的列名和统计值使用英文及 ASCII 字符，可直接用电子表格软件打开；统计单元格显示 `mean +/- sample SD`，缺失值为 `NA`，单位 `A` 表示埃。性能表的 `Ligand/Ab RMSD A` 列按任务类型分别表示小分子重原子 RMSD 或纳米抗体位置 Cα RMSD，两者不可直接比较。
 
 ```bash
 pixi run --locked python -m benchmark.repeats --usd-hour <核实的东京区g6e.2xlarge单价>

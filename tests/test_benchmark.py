@@ -303,8 +303,10 @@ class RepeatTests(unittest.TestCase):
             write_confidence_csv(runs, manifest, Path(root))
             with (Path(root)/'confidence.csv').open(encoding='utf-8-sig', newline='') as handle:
                 row = next(csv.DictReader(handle))
-        self.assertEqual(row['成功/计划'], '2/4')
-        self.assertEqual(row['pLDDT'], '80.00 ± 14.14')
+            self.assertTrue((Path(root)/'confidence.csv').read_text().isascii())
+        self.assertEqual(row['Task'], 'independent')
+        self.assertEqual(row['Success/Planned'], '2/4')
+        self.assertEqual(row['pLDDT'], '80.00 +/- 14.14')
 
     def test_summary_csvs_keep_all_columns_and_missing_metrics(self):
         manifest = {'tasks': [{'id': 'ligand', 'pdb': '1ABC', 'models': ['v2']},
@@ -325,16 +327,22 @@ class RepeatTests(unittest.TestCase):
                 perf_rows = list(csv.DictReader(handle))
             with (Path(root)/'resources.csv').open(encoding='utf-8-sig', newline='') as handle:
                 resource_rows = list(csv.DictReader(handle))
+            self.assertTrue((Path(root)/'performance.csv').read_text().isascii())
+            self.assertTrue((Path(root)/'resources.csv').read_text().isascii())
         self.assertEqual(tuple(perf_rows[0]), PERFORMANCE_COLUMNS)
         self.assertEqual(tuple(resource_rows[0]), RESOURCE_COLUMNS)
         self.assertEqual(len(perf_rows), 2)
-        self.assertEqual(perf_rows[0]['成功/计划'], '1/2')
+        self.assertEqual(perf_rows[0]['Success/Planned'], '1/2')
         self.assertEqual(perf_rows[0]['ID'], '1ABC')
-        self.assertEqual(perf_rows[0]['配体/抗体 RMSD Å'], '2.00 ± 0.00')
-        self.assertEqual(perf_rows[1]['配体/抗体 RMSD Å'], '3.00 ± 0.00')
-        self.assertEqual(resource_rows[0]['实测/计划'], '2/2')
-        self.assertEqual(resource_rows[0]['总秒'], '15.00 ± 7.07')
-        self.assertEqual(resource_rows[1]['费用 USD'], '0.033')
+        self.assertEqual(perf_rows[0]['Task'], 'ligand')
+        self.assertEqual(perf_rows[1]['Task'], 'partner')
+        self.assertEqual(resource_rows[1]['Task'], 'partner')
+        self.assertEqual(perf_rows[0]['Pocket RMSD A'], 'NA')
+        self.assertEqual(perf_rows[0]['Ligand/Ab RMSD A'], '2.00 +/- 0.00')
+        self.assertEqual(perf_rows[1]['Ligand/Ab RMSD A'], '3.00 +/- 0.00')
+        self.assertEqual(resource_rows[0]['Observed/Planned'], '2/2')
+        self.assertEqual(resource_rows[0]['Total s'], '15.00 +/- 7.07')
+        self.assertEqual(resource_rows[1]['Cost USD'], '0.033')
 
     def test_mismatched_input_hash_fails_even_for_failed_job(self):
         with tempfile.TemporaryDirectory() as root:

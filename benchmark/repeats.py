@@ -138,57 +138,57 @@ def aggregate(runs, manifest, usd_hour=None):
 
 def format_stat(value, digits=2, show_range=False):
     if value is None:
-        return '—'
-    display = f"{value['mean']:.{digits}f} ± {value['sd']:.{digits}f}"
+        return 'NA'
+    display = f"{value['mean']:.{digits}f} +/- {value['sd']:.{digits}f}"
     if show_range:
-        display += f" ({value['min']:.{digits}f}–{value['max']:.{digits}f})"
+        display += f" ({value['min']:.{digits}f}-{value['max']:.{digits}f})"
     return display
 
 
-PERFORMANCE_COLUMNS = ('ID', '模型', '成功/计划', 'KRAS RMSD Å', '口袋 RMSD Å',
-                       '配体/抗体 RMSD Å', '接触 F1')
-RESOURCE_COLUMNS = ('ID', '模型', '实测/计划', '总秒', '推理秒', '显存峰值 MiB',
-                    'GPU小时', '费用 USD')
+PERFORMANCE_COLUMNS = ('ID', 'Task', 'Model', 'Success/Planned', 'KRAS RMSD A', 'Pocket RMSD A',
+                       'Ligand/Ab RMSD A', 'Contact F1')
+RESOURCE_COLUMNS = ('ID', 'Task', 'Model', 'Observed/Planned', 'Total s', 'Inference s', 'GPU peak MiB',
+                    'GPU hours', 'Cost USD')
 
 
 def write_summary_csvs(performance, resources, root):
     """Write compact human-readable summaries; full metrics remain in JSON and runs.csv."""
-    with (root / 'performance.csv').open('w', newline='', encoding='utf-8-sig') as handle:
+    with (root / 'performance.csv').open('w', newline='', encoding='utf-8') as handle:
         writer = csv.writer(handle)
         writer.writerow(PERFORMANCE_COLUMNS)
         for row in performance:
-            writer.writerow((row['pdb'], row['model'],
+            writer.writerow((row['pdb'], row['task'], row['model'],
                              f"{row['success']}/{row['planned']}",
                              format_stat(row['ca_rmsd_A']),
                              format_stat(row['pocket_ca_rmsd_A']),
                              format_stat(row['partner_ca_rmsd_A'] if row['type'] == 'nanobody'
                                          else row['focus_rmsd_A']),
                              format_stat(row['interface_f1'])))
-    with (root / 'resources.csv').open('w', newline='', encoding='utf-8-sig') as handle:
+    with (root / 'resources.csv').open('w', newline='', encoding='utf-8') as handle:
         writer = csv.writer(handle)
         writer.writerow(RESOURCE_COLUMNS)
         for row in resources:
             gpu_memory = row['gpu_memory_peak_mib']
             cost = row['process_cost_usd_estimate']
-            writer.writerow((row['pdb'], row['model'],
+            writer.writerow((row['pdb'], row['task'], row['model'],
                              f"{row['observed']}/{row['planned']}",
                              format_stat(row['total_s']),
                              format_stat(row['model_forward_s']),
-                             '—' if gpu_memory is None else f"{gpu_memory['max']:.0f}",
+                             'NA' if gpu_memory is None else f"{gpu_memory['max']:.0f}",
                              f"{row['gpu_hours_total']:.3f}",
-                             '—' if cost is None else f'{cost:.3f}'))
+                             'NA' if cost is None else f'{cost:.3f}'))
 
 
 def write_confidence_csv(runs, manifest, root):
     """Supplemental self-confidence table; these are not reference accuracy scores."""
-    with (root / 'confidence.csv').open('w', newline='', encoding='utf-8-sig') as handle:
+    with (root / 'confidence.csv').open('w', newline='', encoding='utf-8') as handle:
         writer = csv.writer(handle)
-        writer.writerow(('ID', '模型', '成功/计划', 'pLDDT', 'pTM', 'ipTM', 'gPDE Å', 'ranking score'))
+        writer.writerow(('ID', 'Task', 'Model', 'Success/Planned', 'pLDDT', 'pTM', 'ipTM', 'gPDE A', 'Rank'))
         for task in manifest['tasks']:
             for model in task['models']:
                 selected = [row for row in runs if row['task'] == task['id'] and row['model'] == model]
                 success = [row for row in selected if row['status'] == 'success']
-                writer.writerow((task['pdb'], model, f'{len(success)}/{len(selected)}', *(
+                writer.writerow((task['pdb'], task['id'], model, f'{len(success)}/{len(selected)}', *(
                     format_stat(summarize([row[f'confidence_{metric}'] for row in success]),
                                 2 if metric == 'plddt' else 3)
                     for metric in CONFIDENCE_METRICS)))
